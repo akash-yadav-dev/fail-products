@@ -23,6 +23,7 @@ export function verifyEmailCode(input: Omit<Parameters<typeof verifyEmailCodeUse
 }
 
 export function getSessionUser(sessionToken: string, now?: number) {
+  if (!sessionToken) return null;
   return getSessionUserUseCase(repository(), sessionToken, now);
 }
 

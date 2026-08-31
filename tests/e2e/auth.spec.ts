@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 test("redirects signed-out visitors away from the dashboard", async ({ page, context }) => {
-  await page.goto("/api/auth/test-session");
   await context.clearCookies();
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/sign-in$/);
