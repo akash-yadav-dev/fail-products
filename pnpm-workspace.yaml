@@ -9,5 +9,13 @@
 # the native binding that pnpm already installs as an optional dependency
 # (@unrs/resolver-binding-*). ESLint was verified working with the script
 # blocked, so it stays blocked.
+#
+# esbuild (transitive, via drizzle-kit): its postinstall only resolves and links
+# the platform binary that pnpm already installs as an optional dependency
+# (@esbuild/<platform>). drizzle-kit was verified working with the script
+# blocked — `node node_modules/drizzle-kit/bin.cjs --version` reports 0.31.10 —
+# so it stays blocked. Listed explicitly so the decision is recorded rather than
+# re-warned on every install.
 allowBuilds:
+  esbuild: false
   unrs-resolver: false

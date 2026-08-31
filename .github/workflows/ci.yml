@@ -39,9 +39,20 @@ jobs:
           chmod +x scripts/verify-changes.sh
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags --depth=0 origin "${{ github.base_ref }}"
-            RANGE="origin/${{ github.base_ref }}...HEAD"
+            # Verify the contributor's head, not GitHub's synthetic merge
+            # commit (which has a platform author and no DCO trailer).
+            RANGE="origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
           else
-            RANGE="${{ github.event.before }}..${{ github.sha }}"
+            TIP="${{ github.sha }}"
+            SECOND_PARENT="$(git rev-parse "$TIP^2" 2>/dev/null || true)"
+            FIRST_PARENT="$(git rev-parse "$TIP^1" 2>/dev/null || true)"
+            if [ -n "$SECOND_PARENT" ] && [ "$FIRST_PARENT" = "${{ github.event.before }}" ]; then
+              # A merge push contains the already-verified PR commits as the
+              # second parent. Exclude the GitHub-generated merge metadata.
+              RANGE="${{ github.event.before }}..$SECOND_PARENT"
+            else
+              RANGE="${{ github.event.before }}..$TIP"
+            fi
           fi
           echo "Verifying $RANGE"
 

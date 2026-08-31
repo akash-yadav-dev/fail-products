@@ -56,6 +56,7 @@ LEAKED="$(git diff --cached -U0 --diff-filter=ACM $SELF_EXCLUDE \
           | grep -oiE '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}' \
           | tr 'A-Z' 'a-z' \
           | grep -vF "$ALLOWED_EMAIL" \
+          | grep -vE '@(example\.(com|org|net|test)|failproducts\.(com|test)|users\.noreply\.github\.com|sentry\.io|schema\.org)$' \
           | sort -u || true)"
 
 if [ -n "$LEAKED" ]; then

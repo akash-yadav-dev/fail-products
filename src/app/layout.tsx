@@ -3,11 +3,18 @@ import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { SiteHeader } from "@/components/layout/site-header";
-import { SiteFooter } from "@/components/layout/site-footer";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { siteConfig } from "@/lib/config/site";
+
+/**
+ * The root layout carries providers and nothing else.
+ *
+ * Page furniture belongs to a segment: the public site gets its header and
+ * footer from app/(site)/layout.tsx, and the dashboard replaces them entirely
+ * with its own sidebar shell. Putting the marketing chrome here would force it
+ * onto the dashboard, which is a different application surface.
+ */
 
 const inter = Inter({
   variable: "--font-sans",
@@ -56,17 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           <TooltipProvider>
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:ring-3 focus:ring-ring/50"
-            >
-              Skip to content
-            </a>
-            <SiteHeader />
-            <main id="main-content" className="flex flex-1 flex-col">
-              {children}
-            </main>
-            <SiteFooter />
+            {children}
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>

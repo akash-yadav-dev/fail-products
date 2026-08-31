@@ -159,6 +159,13 @@ else
   echo "  FAIL  working on main not blocked (exit $code)"; FAIL=$((FAIL+1))
 fi
 
+out="$(bash scripts/verify-changes.sh --ci 2>&1)"; code=$?
+if ! printf '%s' "$out" | grep -qF "main is protected" && [ "$code" -eq 0 ]; then
+  echo "  PASS  CI observes main without blocking"; PASS=$((PASS+1))
+else
+  echo "  FAIL  CI incorrectly blocks protected main (exit $code)"; FAIL=$((FAIL+1))
+fi
+
 echo
 echo "======================================"
 printf '  PASS: %d   FAIL: %d\n' "$PASS" "$FAIL"

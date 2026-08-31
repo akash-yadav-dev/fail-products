@@ -1,44 +1,52 @@
 // src/app/(dashboard)/dashboard/layout.tsx
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { DashboardNav } from "@/components/dashboard/dashboard-nav";
-import { Container } from "@/components/shared/container";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
+import { SkipToContent } from "@/components/layout/skip-to-content";
 
 /**
  * Creator dashboard shell.
  *
- * There is no authentication yet, so this is a public layout preview. When
- * auth lands, this layout is where the session check belongs.
+ * A separate surface from the public site: its own sidebar, its own header, and
+ * none of the marketing chrome, which is why it lives outside app/(site).
+ *
+ * The inset renders as a plain wrapper rather than its default <main> so the
+ * header stays a banner landmark and the skip link lands past it, on the page
+ * content itself.
+ *
+ * There is no authentication yet, so this is a public layout preview. When auth
+ * lands, the session check belongs here — it is the single point every
+ * dashboard route passes through.
  */
 export default function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
   return (
-    <>
-      <section className="border-b border-border/60 bg-muted/30">
-        <Container className="flex flex-col gap-6 py-8 sm:py-10">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Dashboard
-            </h1>
-            <p className="text-sm text-muted-foreground text-pretty">
-              Your listings, your waitlists, and what FailProducts sent to your
-              product.
-            </p>
-          </div>
-          <DashboardNav />
-        </Container>
-      </section>
+    <SidebarProvider>
+      <SkipToContent />
+      <DashboardSidebar />
 
-      <Container className="flex flex-col gap-8 py-10 sm:py-14">
-        <Alert>
-          <AlertTitle>Not signed in, and not gated yet</AlertTitle>
-          <AlertDescription>
-            Authentication is not implemented, so this section is open and
-            renders placeholders instead of your data.
-          </AlertDescription>
-        </Alert>
-        {children}
-      </Container>
-    </>
+      <SidebarInset asChild>
+        <div>
+          <DashboardHeader />
+
+          <main
+            id="main-content"
+            className="flex flex-1 flex-col gap-6 p-4 sm:gap-8 sm:p-6 lg:p-8"
+          >
+            <Alert>
+              <AlertTitle>Not signed in, and not gated yet</AlertTitle>
+              <AlertDescription>
+                Authentication is not implemented, so this section is open to
+                anyone and shows placeholders instead of your data.
+              </AlertDescription>
+            </Alert>
+
+            {children}
+          </main>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

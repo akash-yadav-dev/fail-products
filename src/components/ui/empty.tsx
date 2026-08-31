@@ -1,4 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority"
+import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
@@ -55,9 +56,18 @@ function EmptyMedia({
   )
 }
 
-function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
+// Local addition to the vendored component: an empty state that *is* the page
+// (404, the error boundary) needs a real <h1>, not a styled <div>, for both
+// assistive technology and crawlers. `asChild` lets the caller supply the tag.
+function EmptyTitle({
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"div"> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : "div"
+
   return (
-    <div
+    <Comp
       data-slot="empty-title"
       className={cn(
         "font-heading text-sm font-medium tracking-tight",
