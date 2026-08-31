@@ -142,11 +142,15 @@ failproducts/
 │   └── test-verify-changes.sh   # regression tests for the gate's own guards
 │
 ├── .env.example                 # names only, never values
+├── .nvmrc                       # Node version, read by CI and by nvm
 ├── components.json
 ├── drizzle.config.ts
+├── eslint.config.mjs
 ├── next.config.ts
 ├── package.json
-├── tailwind.config.*
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml          # pnpm settings, not a monorepo declaration
+├── postcss.config.mjs
 ├── tsconfig.json
 ├── wrangler.jsonc
 ├── AGENTS.md                    # engineering constraints for every agent and tool
@@ -157,6 +161,9 @@ failproducts/
 ├── SECURITY.md
 └── README.md
 ```
+
+Tailwind v4 is configured from `src/app/globals.css` with `@theme`, so there is no
+`tailwind.config.*` file.
 
 ## Ownership rule
 
