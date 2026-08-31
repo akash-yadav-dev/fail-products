@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# FailProducts secret and privacy guard.
+#
+# Blocks credentials, environment files, and any email address other than the
+# project's public commit address from entering a public repository.
+# This is a fast local net, not a replacement for CI secret scanning.
+#
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+ALLOWED_EMAIL="180740493+akash-yadav-dev@users.noreply.github.com"
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACM || true)"
+[ -z "$STAGED" ] && exit 0
+
+# The guard files carry the credential patterns as regex source, and the gate's
+# test suite carries deliberately fake credentials and email addresses as fixtures.
+# Scanning either matches this scanner against itself. Kept in step with the same
+# list in scripts/verify-changes.sh — an exclusion is a blind spot, so anything
+# added here must be reviewed by hand.
+SELF_EXCLUDE="-- . :!scripts/verify-changes.sh :!scripts/test-verify-changes.sh :!.githooks/pre-commit :!.githooks/commit-msg :!.githooks/pre-push"
+
+FAIL=0
+
+# 1. Never commit environment files. .env.example is the only permitted one.
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    .env.example) ;;
+    .env|.env.*|*.dev.vars|.dev.vars)
+      echo "pre-commit: refusing to commit environment file: $f" >&2
+      FAIL=1 ;;
+  esac
+done <<< "$STAGED"
+
+# 2. Scan staged additions for credential shapes.
+SECRETS='(postgres(ql)?://[^ "'"'"']*:[^ "'"'"']*@|sk_live_|sk_test_|rk_live_|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|Zoho-enczapikey |AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+
+if git diff --cached -U0 --diff-filter=ACM $SELF_EXCLUDE | grep -E '^\+' | grep -qEi -- "$SECRETS"; then
+  echo "pre-commit: refusing commit — staged changes match a credential pattern:" >&2
+  git diff --cached -U0 --diff-filter=ACM $SELF_EXCLUDE | grep -E '^\+' | grep -nEi -- "$SECRETS" | head -20 | sed 's/^/  /' >&2
+  echo >&2
+  echo "Remove the value, use .env.example (names only), or store it as a Cloudflare secret." >&2
+  FAIL=1
+fi
+
+# 3. Block every email address except the project's public commit address.
+#
+#    This is an allowlist rather than a blocklist on purpose: naming the private
+#    addresses to block would publish them, which is the outcome being prevented.
+#    Case is normalised with tr rather than grep -i: GNU grep 3.0 as shipped with
+#    Git for Windows aborts (SIGABRT) when -i and -F are combined, and the crash is
+#    silent inside a pipeline — which would leave this guard passing everything.
+LEAKED="$(git diff --cached -U0 --diff-filter=ACM $SELF_EXCLUDE \
+          | grep -E '^\+' \
+          | grep -oiE '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}' \
+          | tr 'A-Z' 'a-z' \
+          | grep -vF "$ALLOWED_EMAIL" \
+          | sort -u || true)"
+
+if [ -n "$LEAKED" ]; then
+  echo "pre-commit: refusing commit — staged changes contain a non-allowlisted email address:" >&2
+  echo "$LEAKED" | sed 's/^/  /' >&2
+  echo >&2
+  echo "This is a public repository and history is permanent." >&2
+  echo "Use $ALLOWED_EMAIL, a project-domain address, or a placeholder." >&2
+  echo "If the address is genuinely required, bypass once with: git commit --no-verify" >&2
+  FAIL=1
+fi
+
+exit "$FAIL"

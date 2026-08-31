@@ -1,0 +1,262 @@
+name: CI
+
+# The server-side half of the verification layer. A local pre-push hook can be
+# bypassed with --no-verify; this cannot. Every check here also runs locally via
+# scripts/verify-changes.sh, so a contributor can reproduce a failure offline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege by default. Jobs that need more request it explicitly.
+# .github/BRANCH-PROTECTION.md
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Always runs. Cheap, and it is the check that protects a public repository.
+  # ---------------------------------------------------------------------------
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # actions/checkout v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          # Full history so the gate can diff against the base branch.
+          fetch-depth: 0
+
+      - name: Verify changes
+        run: |
+          chmod +x scripts/verify-changes.sh
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=0 origin "${{ github.base_ref }}"
+            RANGE="origin/${{ github.base_ref }}...HEAD"
+          else
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          fi
+          echo "Verifying $RANGE"
+
+          # Capture so the classification and impact radius can be surfaced on the
+          # PR page. The exit code still decides the job. docs/AI-VERIFICATION.md §3.
+          set +e
+          OUT="$(bash scripts/verify-changes.sh --range "$RANGE" --ci 2>&1)"
+          CODE=$?
+          set -e
+          printf '%s\n' "$OUT"
+
+          {
+            echo "## Verification gate"
+            echo
+            # No match is normal (an empty range prints nothing), and must not fail the step.
+            printf '%s\n' "$OUT" | grep -E '^(Classification|Impact radius|Branch|Scope|Files):' | sed 's/^/    /' || true
+            echo
+            printf '%s\n' "$OUT" | grep -E '^(BLOCK|WARN) ' | sed 's/^/    /' || true
+            echo
+            if [ "$CODE" -eq 0 ]; then
+              echo "Result: **PASS** — the reviewers this change requires are listed in the log."
+            else
+              echo "Result: **BLOCK** — see the findings above."
+            fi
+            echo
+            echo "_This gate proves the change is not obviously unsafe. It does not prove it is correct._"
+            echo "_Merge readiness is the \`pre-merge-verify\` skill — see [docs/AI-VERIFICATION.md](../blob/${{ github.sha }}/docs/AI-VERIFICATION.md)._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit $CODE
+
+      - name: Test the verification gate itself
+        run: |
+          # The gate's guards fail silently when they break: a grep that crashes
+          # inside a pipeline returns nothing, which reads exactly like "clean".
+          # This suite is what makes that failure mode loud. docs/AI-VERIFICATION.md §13.
+          chmod +x scripts/test-verify-changes.sh
+          bash scripts/test-verify-changes.sh
+
+      - name: Check documentation links
+        run: |
+          # Every relative markdown link must resolve. Broken links are how a
+          # documentation-as-specification project quietly stops being one.
+          status=0
+          while IFS= read -r file; do
+            grep -oE '\]\(\.{0,2}/?[^):]+\.md[^)]*\)' "$file" 2>/dev/null \
+            | sed -E 's/^\]\(//; s/\)$//; s/#.*$//' \
+            | while IFS= read -r link; do
+                [ -z "$link" ] && continue
+                target="$(dirname "$file")/$link"
+                if [ ! -f "$target" ]; then
+                  echo "::error file=$file::broken link -> $link"
+                  exit 1
+                fi
+              done || status=1
+          done < <(find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*')
+          exit $status
+
+      - name: Validate agent and skill definitions
+        run: |
+          # Each agent and skill must carry the frontmatter its loader requires.
+          status=0
+          for f in .claude/agents/*.md; do
+            [ -e "$f" ] || continue
+            head -1 "$f" | grep -q '^---$' || { echo "::error file=$f::missing frontmatter"; status=1; }
+            grep -qE '^name: [a-z0-9-]+$' "$f" || { echo "::error file=$f::missing or invalid 'name:'"; status=1; }
+            grep -q '^description: ' "$f" || { echo "::error file=$f::missing 'description:'"; status=1; }
+            expected="$(basename "$f" .md)"
+            actual="$(grep -m1 '^name: ' "$f" | sed 's/^name: //')"
+            [ "$expected" = "$actual" ] || { echo "::error file=$f::name '$actual' does not match filename '$expected'"; status=1; }
+          done
+          for f in .claude/skills/*/SKILL.md; do
+            [ -e "$f" ] || continue
+            grep -qE '^name: [a-z0-9-]+$' "$f" || { echo "::error file=$f::missing or invalid 'name:'"; status=1; }
+            grep -q '^description: ' "$f" || { echo "::error file=$f::missing 'description:'"; status=1; }
+            expected="$(basename "$(dirname "$f")")"
+            actual="$(grep -m1 '^name: ' "$f" | sed 's/^name: //')"
+            [ "$expected" = "$actual" ] || { echo "::error file=$f::name '$actual' does not match directory '$expected'"; status=1; }
+          done
+          exit $status
+
+      - name: Validate MCP examples
+        run: |
+          status=0
+          for f in mcp/examples/*.json; do
+            [ -e "$f" ] || continue
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" \
+              || { echo "::error file=$f::invalid JSON"; status=1; }
+          done
+          exit $status
+
+  # ---------------------------------------------------------------------------
+  # Detect whether an application exists yet. The repository is currently
+  # documentation-only, so the app checks must not fail the build by being absent.
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Detect application
+    runs-on: ubuntu-latest
+    outputs:
+      has_app: ${{ steps.check.outputs.has_app }}
+      has_e2e: ${{ steps.check.outputs.has_e2e }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - id: check
+        run: |
+          if [ -f package.json ]; then
+            echo "has_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No package.json — application checks skipped. Repository is pre-implementation."
+          fi
+          if ls playwright.config.* >/dev/null 2>&1; then
+            echo "has_e2e=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_e2e=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # The real build gate. Runs only once there is something to build.
+  # ---------------------------------------------------------------------------
+  app:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.has_app == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      # corepack ships with Node, so pnpm needs no third-party action and no
+      # extra supply-chain surface. .github/BRANCH-PROTECTION.md
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Setup Node
+        # actions/setup-node v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
+  # E2E is slower and needs a browser, so it is a separate job that only runs
+  # once a Playwright config exists. Integration tests needing a Neon branch are
+  # deliberately not run here — see docs/AI-WORKFLOW.md.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    needs: [detect, app]
+    if: needs.detect.outputs.has_e2e == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E
+        run: pnpm test:e2e
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        # actions/upload-artifact v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Supply chain. GitHub-native, no third-party action, PR-only.
+  # ---------------------------------------------------------------------------
+  dependencies:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    needs: detect
+    if: github.event_name == 'pull_request' && needs.detect.outputs.has_app == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Review dependencies
+        # actions/dependency-review-action v5.0.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: moderate
+          # AGPL-3.0-only distribution. docs/CONTRIBUTING.md section 2.
+          deny-licenses: GPL-2.0, LGPL-2.0, BSD-4-Clause

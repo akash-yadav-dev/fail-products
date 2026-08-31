@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "FailProducts — read-only MCP profile. The daily driver.",
+    "Copy to .mcp.json at the repository root (git-ignored) and supply credentials",
+    "through your environment. This file contains PLACEHOLDER NAMES ONLY.",
+    "Never put a token, account ID, Neon endpoint, or connection string in here.",
+    "See mcp/README.md for the permission model."
+  ],
+  "mcpServers": {
+    "github": {
+      "_use": "Repository, issues, PRs, commits, CI status. Read-only token.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "shadcn": {
+      "_use": "Component discovery and registry search. No credential required.",
+      "command": "npx",
+      "args": ["-y", "shadcn@latest", "mcp"]
+    },
+    "playwright": {
+      "_use": "Real-browser verification against local or preview. Never production.",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"]
+    }
+  }
+}

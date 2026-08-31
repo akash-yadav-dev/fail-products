@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# FailProducts pre-push gate.
+#
+# The last automatic check before changes leave the machine. Refuses a push that
+# carries secrets, a private email address, an unsigned commit, AI attribution,
+# or a modified migration — and refuses any push to main.
+#
+# Installed via: git config core.hooksPath .githooks
+#
+# Deliberate bypass:  git push --no-verify
+# A bypass is a decision, not a shortcut. If you take one, say so in the PR.
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "$REPO_ROOT" ] && exit 0
+
+GATE="$REPO_ROOT/scripts/verify-changes.sh"
+if [ ! -f "$GATE" ]; then
+  echo "pre-push: scripts/verify-changes.sh is missing — cannot verify this push." >&2
+  echo "          Restore it, or bypass deliberately with: git push --no-verify" >&2
+  exit 1
+fi
+
+REMOTE_NAME="${1:-origin}"
+
+# git feeds one line per ref being pushed:  <local ref> <local sha> <remote ref> <remote sha>
+STATUS=0
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  # Branch deletion — nothing to inspect.
+  [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ] && continue
+
+  case "$REMOTE_REF" in
+    refs/heads/main|refs/heads/master)
+      echo "pre-push: refusing to push directly to ${REMOTE_REF#refs/heads/} on '$REMOTE_NAME'." >&2
+      echo "          main is protected. Branch, open a PR, and let the maintainer review it." >&2
+      echo "          See CLAUDE.md section 2." >&2
+      STATUS=1
+      continue ;;
+  esac
+
+  if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+    # New branch on the remote. Verify every commit the remote does not already have —
+    # never just the tip, or a branch created from a secret would push unexamined.
+    BASE=""
+    if git rev-parse --verify "$REMOTE_NAME/main" >/dev/null 2>&1; then
+      BASE="$(git merge-base "$LOCAL_SHA" "$REMOTE_NAME/main" 2>/dev/null || true)"
+    fi
+    if [ -z "$BASE" ]; then
+      # Nothing on the remote to anchor against: take the parent of the oldest
+      # commit the remote lacks, and fall back to whole-history when that is a root.
+      OLDEST_NEW="$(git rev-list "$LOCAL_SHA" --not --remotes="$REMOTE_NAME" 2>/dev/null | tail -1)"
+      [ -n "$OLDEST_NEW" ] && BASE="$(git rev-parse --verify "${OLDEST_NEW}^" 2>/dev/null || true)"
+    fi
+    # A bare sha tells verify-changes.sh to scan the whole history of that commit.
+    RANGE="${BASE:+$BASE..}$LOCAL_SHA"
+  else
+    RANGE="$REMOTE_SHA..$LOCAL_SHA"
+  fi
+
+  # A range with no commits is a no-op push.
+  [ -z "$(git rev-list "$RANGE" 2>/dev/null | head -1)" ] && continue
+
+  echo "pre-push: verifying $RANGE"
+  if ! bash "$GATE" --range "$RANGE" --quiet; then
+    STATUS=1
+  fi
+done
+
+if [ "$STATUS" -ne 0 ]; then
+  echo >&2
+  echo "pre-push: BLOCKED. Nothing was pushed." >&2
+  echo "          Fix the findings above, or bypass deliberately: git push --no-verify" >&2
+fi
+
+exit "$STATUS"

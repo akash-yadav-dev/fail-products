@@ -1,0 +1,20 @@
+# Every file requires review from the maintainer before merging to main.
+# Paired with the "Require review from Code Owners" branch protection rule.
+# See .github/BRANCH-PROTECTION.md
+
+*                       @akash-yadav-dev
+
+# Explicit entries for the areas where a missed review is most costly.
+/.github/               @akash-yadav-dev
+/.githooks/             @akash-yadav-dev
+/.claude/               @akash-yadav-dev
+/docs/SECURITY.md       @akash-yadav-dev
+/docs/LEGAL.md          @akash-yadav-dev
+/docs/DECISIONS.md      @akash-yadav-dev
+/drizzle/               @akash-yadav-dev
+/src/db/                @akash-yadav-dev
+/src/lib/auth/          @akash-yadav-dev
+/src/lib/security/      @akash-yadav-dev
+/LICENSE                @akash-yadav-dev
+/TRADEMARK.md           @akash-yadav-dev
+/CLAUDE.md              @akash-yadav-dev

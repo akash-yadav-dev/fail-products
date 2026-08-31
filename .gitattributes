@@ -1,0 +1,51 @@
+# Line endings are decided here, not by each contributor's local git config.
+#
+# This matters more than it looks. A shell script stored with CRLF fails on Linux
+# with "bad interpreter: /usr/bin/env bash^M" — which would break CI and every
+# git hook on a non-Windows clone. Pinning it in the repository means a Windows
+# contributor cannot accidentally commit endings that break the build for everyone.
+
+* text=auto eol=lf
+
+# Shell scripts and git hooks must be LF on every platform, including Windows:
+# Git Bash executes them directly and CRLF breaks the shebang.
+*.sh            text eol=lf
+.githooks/*     text eol=lf
+
+# PowerShell is the exception — it is Windows-native and expects CRLF.
+*.ps1           text eol=crlf
+
+# Explicit text types.
+*.md            text eol=lf
+*.json          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.css           text eol=lf
+*.sql           text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+LICENSE         text eol=lf
+CODEOWNERS      text eol=lf
+
+# Binary — never normalise, never diff as text.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.webp          binary
+*.avif          binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.pdf           binary
+
+# Generated files: collapse in pull request diffs so review stays readable.
+pnpm-lock.yaml      linguist-generated=true -diff
+drizzle/migrations/*.sql linguist-generated=false
+
+# GitHub language stats: this is an application, not a docs repository.
+# Documentation and AI-agent definitions should not dominate the language bar.
+docs/**         linguist-documentation=true
+.claude/**      linguist-documentation=true
+mcp/**          linguist-documentation=true

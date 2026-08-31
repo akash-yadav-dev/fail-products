@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# FailProducts attribution guard.
+#
+# Strips AI/agent attribution from commit messages and blocks private email
+# addresses from entering a public repository's permanent history.
+#
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+MSG_FILE="$1"
+ALLOWED_EMAIL="180740493+akash-yadav-dev@users.noreply.github.com"
+
+# 1. Remove agent attribution trailers and footers.
+#    Matched case-insensitively so tool variations are caught too.
+sed -i.bak -E \
+  -e '/^[[:space:]]*Co-[Aa]uthored-[Bb]y:.*(Claude|Anthropic|Copilot|Cursor|Codex|Gemini|GPT|AI)/Id' \
+  -e '/[Gg]enerated with \[?(Claude Code|Claude|Copilot|Cursor)/Id' \
+  -e '/^[[:space:]]*🤖/d' \
+  "$MSG_FILE"
+rm -f "$MSG_FILE.bak"
+
+# 2. Collapse trailing blank lines left behind by the deletions.
+printf '%s\n' "$(cat "$MSG_FILE")" > "$MSG_FILE"
+
+# 3. Block any email address in the message that is not the allowed noreply address.
+# Case is normalised with tr rather than grep -i: GNU grep 3.0 as shipped with Git
+# for Windows aborts (SIGABRT) when -i and -F are combined, and the crash is silent
+# inside a pipeline — which would leave this guard passing everything.
+LEAKED="$(grep -oiE '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}' "$MSG_FILE" \
+          | tr 'A-Z' 'a-z' \
+          | grep -vF "$ALLOWED_EMAIL" || true)"
+if [ -n "$LEAKED" ]; then
+  echo "commit-msg: refusing commit — message contains a non-allowlisted email address:" >&2
+  echo "$LEAKED" | sed 's/^/  /' >&2
+  echo >&2
+  echo "This is a public repository. Use $ALLOWED_EMAIL or remove the address." >&2
+  exit 1
+fi
+
+# 4. Verify the committing identity itself.
+AUTHOR_EMAIL="$(git config user.email || true)"
+if [ "$AUTHOR_EMAIL" != "$ALLOWED_EMAIL" ]; then
+  echo "commit-msg: refusing commit — git user.email is '$AUTHOR_EMAIL'." >&2
+  echo "Expected '$ALLOWED_EMAIL'. Run: bash scripts/setup-git-identity.sh" >&2
+  exit 1
+fi

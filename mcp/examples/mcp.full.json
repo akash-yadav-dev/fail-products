@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "FailProducts — full MCP profile, including write-capable servers.",
+    "Use only for sessions that genuinely need infrastructure access.",
+    "PLACEHOLDER NAMES ONLY — never commit a real token, account ID, or endpoint.",
+    "",
+    "Destructive operations require explicit human authorization every time.",
+    "Agents are never autonomous over production infrastructure (ADR-024).",
+    "Point Neon at a DEVELOPMENT BRANCH. Never migrate production from a session."
+  ],
+  "mcpServers": {
+    "github": {
+      "_use": "Repository, issues, PRs, CI. Opening a PR is allowed; merging is not.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "cloudflare": {
+      "_use": "Workers, R2, DNS, deployment verification. Deployment stays a human action.",
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://observability.mcp.cloudflare.com/sse"],
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "${CLOUDFLARE_API_TOKEN}",
+        "CLOUDFLARE_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}"
+      }
+    },
+    "neon": {
+      "_use": "Schema inspection and query plans. Read-only unless migrating a dev branch.",
+      "command": "npx",
+      "args": ["-y", "@neondatabase/mcp-server-neon", "start"],
+      "env": {
+        "NEON_API_KEY": "${NEON_API_KEY}"
+      }
+    },
+    "shadcn": {
+      "_use": "Component discovery, registry search, installation.",
+      "command": "npx",
+      "args": ["-y", "shadcn@latest", "mcp"]
+    },
+    "playwright": {
+      "_use": "Browser verification against local or preview environments only.",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--headless"]
+    }
+  }
+}
