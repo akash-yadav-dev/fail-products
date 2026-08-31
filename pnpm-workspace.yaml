@@ -1,0 +1,13 @@
+# pnpm settings. This is NOT a monorepo declaration — there is no `packages:`
+# key and none is coming (CLAUDE.md §7). pnpm 11 reads build-script policy from
+# this file rather than from package.json.
+
+# Which dependencies may run install scripts. Default-deny: a package is listed
+# here only after someone has read what its script does.
+#
+# unrs-resolver (transitive, via eslint-config-next): its postinstall only links
+# the native binding that pnpm already installs as an optional dependency
+# (@unrs/resolver-binding-*). ESLint was verified working with the script
+# blocked, so it stays blocked.
+allowBuilds:
+  unrs-resolver: false

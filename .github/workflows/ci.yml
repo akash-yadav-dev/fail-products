@@ -143,6 +143,7 @@ jobs:
     outputs:
       has_app: ${{ steps.check.outputs.has_app }}
       has_e2e: ${{ steps.check.outputs.has_e2e }}
+      has_tests: ${{ steps.check.outputs.has_tests }}
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -159,6 +160,15 @@ jobs:
             echo "has_e2e=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_e2e=false" >> "$GITHUB_OUTPUT"
+          fi
+          # No test runner is installed yet. Skip the step rather than fail on a
+          # missing script, and rather than fake a passing `test` that asserts
+          # nothing — the notice keeps the gap visible on every run.
+          if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No 'test' script — unit and integration tests skipped."
           fi
 
   # ---------------------------------------------------------------------------
@@ -195,6 +205,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
+        if: needs.detect.outputs.has_tests == 'true'
         run: pnpm test
 
       - name: Build

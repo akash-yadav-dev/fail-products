@@ -436,7 +436,12 @@ fi
 # 5. PROJECT CHECKS (only if an implementation exists)
 # ---------------------------------------------------------------------------
 head2 "PROJECT CHECKS"
-if [ -f package.json ]; then
+if [ -f package.json ] && [ ! -d node_modules ]; then
+  # CI's hygiene job checks out the repository without installing anything, and
+  # the app job owns lint/typecheck/test. Running them here would fail on a
+  # missing toolchain rather than on a real defect.
+  note "  ${DIM}skipped — dependencies not installed (CI runs these in the 'app' job)${X}"
+elif [ -f package.json ]; then
   run_step() {
     local label="$1"; shift
     if ! grep -q "\"$1\"" package.json 2>/dev/null; then
