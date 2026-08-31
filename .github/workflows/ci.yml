@@ -38,7 +38,9 @@ jobs:
         run: |
           chmod +x scripts/verify-changes.sh
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags --depth=0 origin "${{ github.base_ref }}"
+            # checkout already has full history; fetch the base ref without the
+            # invalid `--depth=0` value (git accepts a positive depth only).
+            git fetch --no-tags origin "${{ github.base_ref }}"
             # Verify the contributor's head, not GitHub's synthetic merge
             # commit (which has a platform author and no DCO trailer).
             RANGE="origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
@@ -222,6 +224,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=moderate
+
   # ---------------------------------------------------------------------------
   # E2E is slower and needs a browser, so it is a separate job that only runs
   # once a Playwright config exists. Integration tests needing a Neon branch are
@@ -275,7 +280,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
+      - name: Explain dependency review status
+        if: vars.DEPENDENCY_REVIEW_ENABLED != 'true'
+        run: |
+          echo "::notice::Dependency review skipped because the repository Dependency graph is disabled."
+          echo "Enable Dependency graph and set the DEPENDENCY_REVIEW_ENABLED repository variable to true to activate it."
+
       - name: Review dependencies
+        if: vars.DEPENDENCY_REVIEW_ENABLED == 'true'
         # actions/dependency-review-action v5.0.0
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
         with:

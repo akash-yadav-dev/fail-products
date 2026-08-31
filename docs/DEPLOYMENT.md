@@ -165,6 +165,11 @@ Authenticated product creation may rely on rate limits without Turnstile initial
 
 ## 8. Build/deploy checks
 
+The repository currently has no production deployment workflow. CI verifies the application and
+does not deploy Workers. GitHub's dependency-review action is enabled only when the repository
+Dependency graph is enabled and the `DEPENDENCY_REVIEW_ENABLED` repository variable is set to
+`true`; until then CI reports an explicit skip and runs `pnpm audit` for production dependencies.
+
 Every production deploy should pass:
 
 ```text
