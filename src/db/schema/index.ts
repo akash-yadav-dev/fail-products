@@ -7,6 +7,7 @@
  * queries. Application code imports the specific table module it needs.
  */
 export * from "@/db/schema/enums";
+export * from "@/db/schema/auth";
 export * from "@/db/schema/products";
 export * from "@/db/schema/taxonomy";
 export * from "@/db/schema/users";

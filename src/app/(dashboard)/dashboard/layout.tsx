@@ -1,9 +1,17 @@
 // src/app/(dashboard)/dashboard/layout.tsx
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { SkipToContent } from "@/components/layout/skip-to-content";
+import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
+import { getSessionUser } from "@/services/auth/server-auth";
+import { e2eAuthBypassEnabled } from "@/lib/config/auth";
+import { signOutAction } from "@/app/(site)/auth/actions";
+
+const TEST_COOKIE = "failproducts_e2e_session";
 
 /**
  * Creator dashboard shell.
@@ -15,17 +23,25 @@ import { SkipToContent } from "@/components/layout/skip-to-content";
  * header stays a banner landmark and the skip link lands past it, on the page
  * content itself.
  *
- * There is no authentication yet, so this is a public layout preview. When auth
- * lands, the session check belongs here — it is the single point every
- * dashboard route passes through.
+ * Authentication is checked here so every dashboard route passes through the
+ * same server-side session gate.
  */
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
+  const cookieStore = await cookies();
+  const testBypass =
+    e2eAuthBypassEnabled() && cookieStore.get(TEST_COOKIE)?.value === "1";
+  if (!testBypass) {
+    const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
+    const session = await getSessionUser(sessionToken ?? "");
+    if (!session) redirect("/auth/sign-in");
+  }
+
   return (
     <SidebarProvider>
       <SkipToContent />
-      <DashboardSidebar />
+      <DashboardSidebar signOutAction={signOutAction} />
 
       <SidebarInset asChild>
         <div>
@@ -35,14 +51,6 @@ export default function DashboardLayout({
             id="main-content"
             className="flex flex-1 flex-col gap-6 p-4 sm:gap-8 sm:p-6 lg:p-8"
           >
-            <Alert>
-              <AlertTitle>Not signed in, and not gated yet</AlertTitle>
-              <AlertDescription>
-                Authentication is not implemented, so this section is open to
-                anyone and shows placeholders instead of your data.
-              </AlertDescription>
-            </Alert>
-
             {children}
           </main>
         </div>

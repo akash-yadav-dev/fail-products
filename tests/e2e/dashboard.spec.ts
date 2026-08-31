@@ -30,6 +30,13 @@ function sidebar(page: import("@playwright/test").Page, width: number | undefine
     : page.locator('[data-slot="sidebar"]').first();
 }
 
+test.beforeEach(async ({ page }) => {
+  // The local Playwright build exposes a test-only session cookie so the shell
+  // can still be exercised without sending real email. Production rejects this
+  // route and the dashboard always requires a real server-side session.
+  await page.goto("/api/auth/test-session");
+});
+
 test.describe("the dashboard shell", () => {
   test("loads and names the section", async ({ page }) => {
     const response = await page.goto("/dashboard");
@@ -58,12 +65,10 @@ test.describe("the dashboard shell", () => {
     await expect(page.getByRole("contentinfo")).toHaveCount(0);
   });
 
-  test("says plainly that nothing is gated yet", async ({ page }) => {
+  test("renders only after the test session is established", async ({ page }) => {
     await page.goto("/dashboard");
 
-    await expect(
-      page.getByText(/authentication is not implemented/i)
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   });
 
   test("exposes a skip link as the first focusable control", async ({

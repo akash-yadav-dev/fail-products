@@ -64,7 +64,7 @@ function isCurrent(pathname: string, href: string): boolean {
     : isActivePath(pathname, href);
 }
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ signOutAction }: { signOutAction: () => Promise<void> }) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
 
@@ -141,11 +141,7 @@ export function DashboardSidebar() {
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                {/*
-                  No account exists yet (ADR-014 is not implemented), so this
-                  reports the signed-out state instead of a fabricated profile.
-                */}
-                <SidebarMenuButton size="lg" tooltip="Not signed in">
+                <SidebarMenuButton size="lg" tooltip="Account">
                   <span
                     aria-hidden="true"
                     className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
@@ -154,10 +150,10 @@ export function DashboardSidebar() {
                   </span>
                   <span className="flex min-w-0 flex-col leading-tight">
                     <span className="truncate text-sm font-medium">
-                      Not signed in
+                      Signed in
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
-                      Accounts are not live yet
+                      Passwordless account
                     </span>
                   </span>
                   <ChevronsUpDown className="ml-auto size-4 opacity-60" />
@@ -170,13 +166,13 @@ export function DashboardSidebar() {
                 sideOffset={8}
               >
                 <DropdownMenuLabel className="font-normal text-muted-foreground">
-                  Sign-in is passwordless: a link by email, or GitHub.
+                  Your account is signed in with a passwordless session.
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/auth/sign-in" onClick={closeOnMobile}>
-                    Go to sign in
-                  </Link>
+                  <form action={signOutAction}>
+                    <button type="submit" className="w-full text-left">Sign out</button>
+                  </form>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/" onClick={closeOnMobile}>

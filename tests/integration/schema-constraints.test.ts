@@ -81,7 +81,7 @@ describe.skipIf(noDatabase)("schema constraints", () => {
 
       await expect(
         createUser({
-          username: user.username.toUpperCase(),
+          username: user.username!.toUpperCase(),
           usernameLower: user.usernameLower,
         })
       ).rejects.toThrow();

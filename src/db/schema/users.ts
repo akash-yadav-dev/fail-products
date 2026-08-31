@@ -19,9 +19,9 @@ export const users = pgTable(
      * The public handle. It appears in /u/[username], so it is part of the URL
      * namespace ADR-019 reserves words in.
      */
-    username: varchar("username", { length: 39 }).notNull(),
+    username: varchar("username", { length: 39 }),
     /** Lowercased `username`, so uniqueness is case-insensitive. */
-    usernameLower: varchar("username_lower", { length: 39 }).notNull(),
+    usernameLower: varchar("username_lower", { length: 39 }),
 
     /**
      * Lowercased at write. Nullable because a GitHub account may not release a

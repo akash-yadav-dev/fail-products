@@ -51,7 +51,7 @@ export default defineConfig({
         url: baseURL,
         // The only environment where src/app/fault/page.tsx exists. It is what
         // gives tests/e2e/error-boundary.spec.ts an error to assert against.
-        env: { E2E_FAULT_ROUTES: "1" },
+        env: { E2E_FAULT_ROUTES: "1", E2E_AUTH_BYPASS: "1", NEXT_PUBLIC_SITE_URL: "http://localhost:3100" },
         // A production build is slow on a cold cache; CI is slower still.
         timeout: 300_000,
         // Never inherit a process this config did not start.
