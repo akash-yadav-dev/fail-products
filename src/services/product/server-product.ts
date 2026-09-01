@@ -6,6 +6,7 @@ import {
   changeModerationState as changeModerationStateUseCase,
   changePublicationState as changePublicationStateUseCase,
   createProduct as createProductUseCase,
+  listPublicDirectory as listPublicDirectoryUseCase,
   resolvePublicProduct as resolvePublicProductUseCase,
   updateProduct as updateProductUseCase,
 } from "@/services/product/product-service";
@@ -62,8 +63,18 @@ export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);
 }
 
-export function listPublicProducts(limit = 24) {
-  return repository().listPublic({ limit });
+export function listPublicDirectory(
+  input: Without<Parameters<typeof listPublicDirectoryUseCase>[0]> = {}
+) {
+  return listPublicDirectoryUseCase({ ...input, repository: repository() });
+}
+
+export function listCategoriesWithCounts() {
+  return repository().countPublicByCategory();
+}
+
+export function findCategoryBySlug(slug: string) {
+  return repository().findCategoryBySlug(slug);
 }
 
 export function listStatusHistory(productId: string) {
