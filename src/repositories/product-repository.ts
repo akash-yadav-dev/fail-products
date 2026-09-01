@@ -327,6 +327,7 @@ export class ProductRepository {
     tagline: string | null;
     description: string | null;
     websiteUrl: string | null;
+    categoryId?: string | null;
     failureStatus: FailureStatus;
   }) {
     const [row] = await this.db

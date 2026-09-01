@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PRODUCT_CATEGORIES } from "@/domain/product/category";
 import { FAILURE_STATUSES } from "@/domain/product/failure-status";
 import type { FormActionState } from "@/lib/forms/action-state";
 
@@ -78,6 +79,28 @@ export function SubmitForm({ action }: { action: SubmitAction }) {
             {FAILURE_STATUSES.map((status) => (
               <SelectItem key={status.value} value={status.value}>
                 {status.label} — {status.description}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="categorySlug">Category</Label>
+        {/*
+          A fixed list, not a text field (ADR-026). Free-form categories turn
+          every typo into its own indexable page, which docs/PRODUCT.md §9
+          forbids. The value is still validated server-side — a <select> is a
+          suggestion, and this is an ordinary form post.
+        */}
+        <Select name="categorySlug" defaultValue="other">
+          <SelectTrigger id="categorySlug" className="h-11">
+            <SelectValue placeholder="What kind of product was it?" />
+          </SelectTrigger>
+          <SelectContent>
+            {PRODUCT_CATEGORIES.map((category) => (
+              <SelectItem key={category.slug} value={category.slug}>
+                {category.name}
               </SelectItem>
             ))}
           </SelectContent>

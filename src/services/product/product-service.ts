@@ -1,4 +1,8 @@
 // src/services/product/product-service.ts
+import {
+  findCategoryBySlug,
+  isProductCategorySlug,
+} from "@/domain/product/category";
 import type { FailureStatus } from "@/domain/product/failure-status";
 import {
   decodeProductCursor,
@@ -34,6 +38,7 @@ export type ProductServiceError =
   | "FORBIDDEN"
   | "INVALID_NAME"
   | "INVALID_URL"
+  | "INVALID_CATEGORY"
   | "ILLEGAL_TRANSITION"
   | "SLUG_EXHAUSTED";
 
@@ -76,6 +81,25 @@ function parseWebsiteUrl(input: string | null | undefined): string | null {
 }
 
 /**
+ * The category id for a submitted slug, or null when none was chosen.
+ *
+ * Resolved against the curated list in the domain module rather than by
+ * querying the table, because the list is what defines the taxonomy (ADR-026) —
+ * the table is its copy. A slug that is not on the list is an error, not a
+ * silent null: a product filed under a category that does not exist would
+ * vanish from every category page with nothing to explain it.
+ *
+ * `docs/SECURITY.md` §4 lists category IDs among the values to validate. A
+ * `<select>` is a suggestion; the request is a form post like any other.
+ */
+function parseCategorySlug(input: string | null | undefined): string | null {
+  const slug = input?.trim();
+  if (!slug) return null;
+  if (!isProductCategorySlug(slug)) throw new ProductError("INVALID_CATEGORY");
+  return findCategoryBySlug(slug)!.id;
+}
+
+/**
  * Creates a product as a draft.
  *
  * The slug loop walks the candidate list, skipping anything already taken in
@@ -90,12 +114,14 @@ export async function createProduct(input: {
   tagline?: string | null;
   description?: string | null;
   websiteUrl?: string | null;
+  categorySlug?: string | null;
   failureStatus: FailureStatus;
 }) {
   const name = parseName(input.name);
   const websiteUrl = parseWebsiteUrl(input.websiteUrl);
   const tagline = parseOptionalText(input.tagline, MAX_TAGLINE_LENGTH);
   const description = parseOptionalText(input.description, 20_000);
+  const categoryId = parseCategorySlug(input.categorySlug);
 
   for (const candidate of slugCandidates(name)) {
     if (!(await input.repository.isSlugAvailable(candidate))) continue;
@@ -107,6 +133,7 @@ export async function createProduct(input: {
       tagline,
       description,
       websiteUrl,
+      categoryId,
       failureStatus: input.failureStatus,
     });
 
