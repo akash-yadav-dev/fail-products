@@ -332,6 +332,30 @@ export class ProductRepository {
       .limit(input.limit);
   }
 
+  /**
+   * Every publicly visible product, for the sitemap.
+   *
+   * The one query in this file that is deliberately unpaginated, because a
+   * sitemap that stops at page one is a sitemap that hides most of the site.
+   * It is still bounded by `limit`, and the caller states the bound — an
+   * unbounded read on a metered database is not made safe by being infrequent.
+   *
+   * The same visibility predicate as everything else. A sitemap listing a
+   * hidden product hands a crawler the URL of something a moderator removed,
+   * which is worse than a leak on a page nobody linked to.
+   */
+  listAllPublicForSitemap(limit: number) {
+    return this.db
+      .select({
+        slug: products.slug,
+        updatedAt: products.updatedAt,
+      })
+      .from(products)
+      .where(publiclyVisibleProduct)
+      .orderBy(desc(products.updatedAt))
+      .limit(limit);
+  }
+
   /** One category by its public slug, or null. Drives the 404 on an unknown one. */
   async findCategoryBySlug(slug: string) {
     const [row] = await this.db

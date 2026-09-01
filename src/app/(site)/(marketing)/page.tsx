@@ -1,4 +1,5 @@
 // src/app/(marketing)/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Layers, MessageSquare, Search } from "lucide-react";
 
@@ -14,8 +15,15 @@ import {
 import { SiteLogo } from "@/components/layout/site-logo";
 import { StatusBadge } from "@/components/products/status-badge";
 import { Container } from "@/components/shared/container";
+import { SiteJsonLd } from "@/components/shared/structured-data";
 import { FAILURE_STATUSES } from "@/domain/product/failure-status";
 import { siteConfig } from "@/lib/config/site";
+
+export const metadata: Metadata = {
+  // The home page's own canonical. Without one, the site's most-linked URL is
+  // the only public page that does not name itself.
+  alternates: { canonical: "/" },
+};
 
 const HOW_IT_WORKS = [
   {
@@ -38,6 +46,9 @@ const HOW_IT_WORKS = [
 export default function HomePage() {
   return (
     <>
+      {/* The site's own identity, once, here. Nothing about a listed product. */}
+      <SiteJsonLd />
+
       <section className="border-b border-border/60">
         <Container className="flex flex-col items-center gap-6 py-16 text-center sm:py-24">
           <SiteLogo size="lg" withWordmark={false} priority />

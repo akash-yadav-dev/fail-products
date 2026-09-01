@@ -15,6 +15,10 @@ export const metadata: Metadata = {
   title: "Products",
   description:
     "Browse products that failed, stalled, or never found traction, and read what their founders learned.",
+  // Always the bare path. ?sort=, ?cursor=, and ?q= render the same listings in
+  // a different order, and each is a duplicate of this page rather than a page
+  // of its own (docs/PRODUCT.md §9).
+  alternates: { canonical: "/products" },
 };
 
 export default async function ProductsPage({
