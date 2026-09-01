@@ -767,3 +767,81 @@ limitation rather than hidden.
 Most of L2 reports `NOT_APPLICABLE — pre-implementation` until `src/` exists. That is honest and
 intended: the pipeline is built before the code so the first feature is verified the same way as
 the hundredth.
+
+## ADR-026 — Categories are a fixed, curated taxonomy; tags carry the open vocabulary
+
+**Status:** Accepted
+**Date:** 2026-09-01
+
+Resolves open question 5, which blocked Phase 2 slice 2.3.
+
+### Decision
+
+`categories` holds a fixed list, seeded by migration `0006_seed_categories.sql` and specified
+in `src/domain/product/category.ts`. Only a migration adds a category; no user-facing path
+creates one. A product picks at most one from the list, and the choice is validated
+server-side against that list, not against the table.
+
+Thirteen categories ship: AI, Developer tools, SaaS, Productivity, Marketplace, Social,
+E-commerce, Fintech, Health, Education, Games, Hardware, and Other.
+
+`product_tags` is unchanged and remains the free-form axis. The `tags` table shape already
+allows user-created rows; nothing in this decision closes that door.
+
+The domain module is the source of truth, including the row ids, which are literal UUIDv7
+values. The migration writes exactly those rows.
+`tests/integration/category-taxonomy.test.ts` fails if the two ever disagree.
+
+### Reason
+
+`docs/PRODUCT.md` §10 already drew this line without naming it: a Category is a "normalized
+classification" and a ProductTag is a "flexible discovery label". Those are two different
+jobs, and the schema already has two tables for them. The open question was really whether to
+collapse them, and collapsing them loses the navigable axis.
+
+`docs/PRODUCT.md` §9 is the constraint that settles it: "Only index useful, unique pages. Do
+not generate thousands of thin parameterized pages." A free-form taxonomy generates exactly
+that, and it does so from typos and casing alone — `ai`, `AI`, `A.I.`, and `artificial
+intelligence` become four indexable pages holding one product each. Nothing in a Stage 0
+budget cleans that up.
+
+`docs/ROADMAP.md` Phase 4.5 requires "at least one worked example per category, so no category
+page is empty on arrival". That target is only meaningful against a finite list; against a
+free-form one it cannot be stated, let alone met.
+
+Ids are literal rather than `gen_random_uuid()` so every environment holds the same id for the
+same category. A fixture, a dump, and a fresh branch then agree, re-running the seed is a
+no-op, and the domain module can hand an id straight to a query filter. `gen_random_uuid()`
+would also produce v4 keys, against ADR-021.
+
+### Rejected alternatives
+
+- **Free-form, created on submit** — maximum flexibility, and it hands an anonymous-ish input
+  the power to create indexable pages. It contradicts `PRODUCT.md` §9 directly, and it makes
+  every category page's emptiness a permanent possibility.
+- **Fixed list plus a moderator UI to extend it** — the same schema as this decision, with
+  dashboard surface that belongs to Phase 3 moderation. Deferred, not rejected: adding it later
+  changes no column.
+- **No categories at all, tags only** — simpler, and gives up the one navigation axis that
+  answers "who else tried this?", which `docs/PRODUCT.md` §2.3 treats as the product's core
+  value.
+- **Seeding from the domain module at application start** — removes the duplicate list, and
+  makes the database's contents depend on deploy order rather than on a migration. Schema and
+  seed belong in the same audited, ordered place.
+
+### Consequences
+
+Adding a category is a migration and a PR, not a form field. That is the intended friction: a
+taxonomy that anyone can extend at any time is not a taxonomy.
+
+"Other" exists and will accumulate. A junk drawer is a real cost and still the cheaper one —
+without it a founder has to file their product under something it is not, and deliberate
+mislabels are less recoverable than an honest overflow bucket. If Other grows past a useful
+share of the directory, that is the measurement that justifies splitting it.
+
+Two copies of the list exist, in the domain module and in the migration. The integration test
+is what makes that safe; without it the pair would drift and `/categories/[slug]` would 404 for
+reasons nothing in the code explains.
+
+Category slugs join usernames, product slugs, and tag slugs in the reserved-name namespace
+(ADR-019). A unit test asserts no curated slug is reserved.

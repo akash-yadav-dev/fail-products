@@ -1,26 +1,54 @@
 // src/app/categories/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Layers } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
+import { canSkipDatabaseAtBuild } from "@/lib/config/database";
+import { PRODUCT_CATEGORIES } from "@/domain/product/category";
+import { listCategoriesWithCounts } from "@/services/product/server-product";
 
 export const metadata: Metadata = {
   title: "Categories",
   description:
     "Browse failed and struggling products by what they were: the category tells you who else tried this.",
+  alternates: { canonical: "/categories" },
 };
 
-export default function CategoriesPage() {
+/**
+ * Regenerated hourly. Prerendered once, the counts would be frozen at whatever
+ * they were on the day of the deploy, and a category page reachable from a
+ * "0 listings" card is worse than no count at all.
+ */
+export const revalidate = 3600;
+
+/**
+ * The category index.
+ *
+ * Counts come from the same visibility predicate as every list, so a category
+ * can never advertise a number that includes drafts or hidden listings — the
+ * count and the page behind it always agree.
+ *
+ * An empty category still renders. The taxonomy is fixed (ADR-026), so "no
+ * listings in Fintech yet" is a true and useful statement about the directory;
+ * hiding the row would instead suggest the category does not exist.
+ */
+export default async function CategoriesPage() {
+  // CI builds without a database on purpose, so a prerender there falls back to
+  // the curated list with no counts rather than failing the build. A deployed
+  // build has DATABASE_URL and prerenders the real numbers.
+  const categories = canSkipDatabaseAtBuild()
+    ? PRODUCT_CATEGORIES.map((category) => ({ ...category, productCount: 0 }))
+    : await listCategoriesWithCounts();
+
   return (
     <>
       <PageHeader
@@ -30,21 +58,46 @@ export default function CategoriesPage() {
       />
 
       <Container className="py-10 sm:py-14">
-        <Empty className="border py-16">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Layers />
-            </EmptyMedia>
-            <EmptyTitle>No categories yet</EmptyTitle>
-            <EmptyDescription>
-              Categories appear once products are listed against them. The
-              taxonomy is deliberately not invented ahead of real listings.
-            </EmptyDescription>
-          </EmptyHeader>
-          <Button asChild variant="outline" className="h-10">
-            <Link href="/products">Browse products</Link>
-          </Button>
-        </Empty>
+        <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {categories.map((category) => (
+            <li key={category.id} className="flex">
+              <Card className="w-full">
+                <CardHeader>
+                  {/*
+                    A real heading, not just styled text. CardTitle renders a
+                    div, and an index of thirteen cards with no headings gives a
+                    screen-reader user no way to move between them
+                    (docs/DESIGN.md §10). ProductCard already does this.
+                  */}
+                  <CardTitle>
+                    <h2>{category.name}</h2>
+                  </CardTitle>
+                  {category.description ? (
+                    <CardDescription className="text-pretty">
+                      {category.description}
+                    </CardDescription>
+                  ) : null}
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {category.productCount === 0
+                      ? "No listings yet"
+                      : `${category.productCount} listing${
+                          category.productCount === 1 ? "" : "s"
+                        }`}
+                  </p>
+                  <Link
+                    href={`/categories/${category.slug}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg text-sm font-medium outline-none transition-colors hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    Browse {category.name.toLowerCase()}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </CardContent>
+              </Card>
+            </li>
+          ))}
+        </ul>
       </Container>
     </>
   );

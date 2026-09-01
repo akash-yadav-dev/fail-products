@@ -1,6 +1,18 @@
 // src/services/product/product-service.ts
+import {
+  findCategoryBySlug,
+  isProductCategorySlug,
+} from "@/domain/product/category";
 import type { FailureStatus } from "@/domain/product/failure-status";
+import {
+  decodeProductCursor,
+  encodeProductCursor,
+  parsePageSize,
+  parseProductSort,
+  type ProductSort,
+} from "@/domain/product/listing";
 import { authorize, type Viewer } from "@/domain/product/permissions";
+import { parseSearchQuery } from "@/domain/product/search";
 import { slugCandidates } from "@/domain/product/slug";
 import {
   canTransitionFailureStatus,
@@ -27,6 +39,7 @@ export type ProductServiceError =
   | "FORBIDDEN"
   | "INVALID_NAME"
   | "INVALID_URL"
+  | "INVALID_CATEGORY"
   | "ILLEGAL_TRANSITION"
   | "SLUG_EXHAUSTED";
 
@@ -69,6 +82,25 @@ function parseWebsiteUrl(input: string | null | undefined): string | null {
 }
 
 /**
+ * The category id for a submitted slug, or null when none was chosen.
+ *
+ * Resolved against the curated list in the domain module rather than by
+ * querying the table, because the list is what defines the taxonomy (ADR-026) —
+ * the table is its copy. A slug that is not on the list is an error, not a
+ * silent null: a product filed under a category that does not exist would
+ * vanish from every category page with nothing to explain it.
+ *
+ * `docs/SECURITY.md` §4 lists category IDs among the values to validate. A
+ * `<select>` is a suggestion; the request is a form post like any other.
+ */
+function parseCategorySlug(input: string | null | undefined): string | null {
+  const slug = input?.trim();
+  if (!slug) return null;
+  if (!isProductCategorySlug(slug)) throw new ProductError("INVALID_CATEGORY");
+  return findCategoryBySlug(slug)!.id;
+}
+
+/**
  * Creates a product as a draft.
  *
  * The slug loop walks the candidate list, skipping anything already taken in
@@ -83,12 +115,14 @@ export async function createProduct(input: {
   tagline?: string | null;
   description?: string | null;
   websiteUrl?: string | null;
+  categorySlug?: string | null;
   failureStatus: FailureStatus;
 }) {
   const name = parseName(input.name);
   const websiteUrl = parseWebsiteUrl(input.websiteUrl);
   const tagline = parseOptionalText(input.tagline, MAX_TAGLINE_LENGTH);
   const description = parseOptionalText(input.description, 20_000);
+  const categoryId = parseCategorySlug(input.categorySlug);
 
   for (const candidate of slugCandidates(name)) {
     if (!(await input.repository.isSlugAvailable(candidate))) continue;
@@ -100,6 +134,7 @@ export async function createProduct(input: {
       tagline,
       description,
       websiteUrl,
+      categoryId,
       failureStatus: input.failureStatus,
     });
 
@@ -324,3 +359,85 @@ export async function resolvePublicProduct(
 
   return { kind: "missing" };
 }
+
+/**
+ * One page of the public directory, and the cursor for the next one.
+ *
+ * Every public list goes through here: `/products`, `/status/[slug]`,
+ * `/categories/[slug]`, and search differ only in the filters they pass. The
+ * parameters arrive as `unknown` because they come from a query string, and
+ * each is parsed by the domain module rather than trusted — an unvalidated
+ * sort chooses a column and an unvalidated limit chooses how much of the table
+ * an anonymous request may read.
+ */
+export async function listPublicDirectory(input: {
+  repository: ProductRepository;
+  sort?: unknown;
+  cursor?: unknown;
+  pageSize?: unknown;
+  search?: unknown;
+  failureStatus?: FailureStatus;
+  categoryId?: string;
+}) {
+  const sort = parseProductSort(input.sort);
+  const cursor = decodeProductCursor(input.cursor);
+  const limit = parsePageSize(input.pageSize);
+  const search = parseSearchQuery(input.search);
+
+  // A search is a different query, not a filtered browse: ranked instead of
+  // chronological, and one bounded page instead of a keyset walk. Branching
+  // here keeps the cursor from being a parameter that silently does nothing.
+  if (search) {
+    const items = await input.repository.searchPublic({
+      term: search,
+      limit,
+      filters: {
+        failureStatus: input.failureStatus,
+        categoryId: input.categoryId,
+      },
+    });
+
+    return { items, sort, search, nextCursor: null, truncated: items.length >= limit };
+  }
+
+  // One more row than the page shows. That extra row is the whole answer to "is
+  // there another page?", so the alternative — a second COUNT over the same
+  // predicate — is a query billed for information this one already has.
+  const rows = await input.repository.listPublic({
+    limit: limit + 1,
+    sort,
+    cursor,
+    filters: {
+      failureStatus: input.failureStatus,
+      categoryId: input.categoryId,
+    },
+  });
+
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const last = items.at(-1);
+
+  // The position to resume from is the sort column of the last row shown.
+  const sortedAt =
+    sort === "recently-updated" ? last?.updatedAt : last?.publishedAt;
+
+  return {
+    items,
+    sort,
+    search,
+    truncated: false,
+    // `publishedAt` is non-null on every publicly visible row — migration 0005
+    // makes that a CHECK constraint rather than a convention — so this guard is
+    // the type system's price for the column being nullable in general, not a
+    // silent truncation of the list.
+    nextCursor:
+      hasMore && last && sortedAt
+        ? encodeProductCursor({ sortedAt, id: last.id })
+        : null,
+  };
+}
+
+export type PublicDirectoryPage = Awaited<
+  ReturnType<typeof listPublicDirectory>
+>;
+export type { ProductSort };

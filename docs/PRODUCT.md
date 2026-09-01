@@ -395,11 +395,32 @@ Immutable record of product status changes.
 
 ### Category
 
-Normalized classification.
+Normalized classification. **A fixed, curated list** — only a migration adds a category, and a
+product picks at most one (ADR-026). The list is specified in
+`src/domain/product/category.ts` and seeded by `drizzle/migrations/0006_seed_categories.sql`:
+
+| Slug | Name |
+|---|---|
+| `ai` | AI |
+| `developer-tools` | Developer tools |
+| `saas` | SaaS |
+| `productivity` | Productivity |
+| `marketplace` | Marketplace |
+| `social` | Social |
+| `ecommerce` | E-commerce |
+| `fintech` | Fintech |
+| `health` | Health |
+| `education` | Education |
+| `games` | Games |
+| `hardware` | Hardware |
+| `other` | Other |
+
+The list is fixed because §9 below forbids generating thousands of thin parameterized pages,
+and a free-form taxonomy produces exactly that from typos and casing alone.
 
 ### ProductTag
 
-Flexible discovery labels.
+Flexible discovery labels. This is the free-form axis; Category is not.
 
 ### Comment
 

@@ -1,15 +1,17 @@
 // src/repositories/product-repository.ts
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, or, sql, type SQL } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import { publiclyVisibleProduct } from "@/db/queries/product-visibility";
 import {
+  categories,
   productSlugHistory,
   productStatusHistory,
   products,
   users,
 } from "@/db/schema";
 import type { FailureStatus } from "@/domain/product/failure-status";
+import type { ProductCursor, ProductSort } from "@/domain/product/listing";
 import type {
   ModerationState,
   PublicationState,
@@ -37,6 +39,9 @@ const publicColumns = {
   failureStatus: products.failureStatus,
   publishedAt: products.publishedAt,
   createdAt: products.createdAt,
+  // Public because the card shows it: `DESIGN.md` §7 puts "Last updated" on
+  // every card, and a directory of failures has to say how stale an entry is.
+  updatedAt: products.updatedAt,
 } as const;
 
 /** Adds the columns only an owner or moderator may see. */
@@ -45,12 +50,65 @@ const ownerColumns = {
   ownerId: products.ownerId,
   publicationState: products.publicationState,
   moderationState: products.moderationState,
-  updatedAt: products.updatedAt,
+} as const;
+
+/**
+ * A card's columns: the public product plus the category it sits in.
+ *
+ * The category comes from a join rather than a query per row, because a page of
+ * 24 cards each fetching its own category is the N+1 `ENGINEERING.md` §5
+ * forbids.
+ */
+const listColumns = {
+  ...publicColumns,
+  categorySlug: categories.slug,
+  categoryName: categories.name,
 } as const;
 
 export type PublicProduct = {
   [K in keyof typeof publicColumns]: (typeof publicColumns)[K]["_"]["data"];
 };
+
+/**
+ * One row of a public list.
+ *
+ * Derived from the query rather than from `listColumns`, because the two are
+ * not the same shape: the category comes through a LEFT JOIN, so `categorySlug`
+ * and `categoryName` are nullable in the result even though the columns they
+ * select are `NOT NULL` on their own table. A hand-written mapped type over the
+ * column map loses that and tells callers a category is always present.
+ */
+export type ProductListItem = Awaited<
+  ReturnType<ProductRepository["listPublic"]>
+>[number];
+
+/**
+ * What a public list may be narrowed by.
+ *
+ * One shape for every public list — `/products`, `/status/[slug]`,
+ * `/categories/[slug]`, and search — so a new surface reuses the filtered,
+ * state-checked query instead of writing a fourth one that forgets a filter.
+ */
+export type PublicListFilters = {
+  failureStatus?: FailureStatus;
+  categoryId?: string;
+};
+
+/**
+ * The tsquery a search runs.
+ *
+ * `websearch_to_tsquery`, not `to_tsquery`. It is the only one of the family
+ * built for raw user input: it accepts quoted phrases and `-exclusion` the way
+ * a visitor expects, and it never raises a syntax error on unbalanced quotes or
+ * stray operators. `to_tsquery('english', 'a & & b')` throws, and a thrown
+ * query on a public search box is a 500 anyone can trigger by typing.
+ *
+ * The value is a bound parameter. Sanitising a string is never what makes a
+ * query injection-safe, and nothing in this file pretends otherwise.
+ */
+function searchQuery(term: string) {
+  return sql`websearch_to_tsquery('english', ${term})`;
+}
 
 export class ProductRepository {
   constructor(private readonly db: Database) {}
@@ -126,33 +184,192 @@ export class ProductRepository {
   }
 
   /**
-   * A page of the public directory, newest first.
+   * A page of the public directory.
+   *
+   * The one query every public list is built from. Slice 2.1 of the Phase 2
+   * plan requires exactly that: `/products`, `/status/[slug]`, and
+   * `/categories/[slug]` differ only by their filters, and three hand-written
+   * queries would be three chances to forget a state filter.
    *
    * Cursor pagination, not offset (`ENGINEERING.md` §5): an offset re-scans
    * every skipped row and shifts under inserts, so page 2 can repeat or drop a
    * product that was published while the visitor was reading page 1.
    *
-   * The cursor is `(publishedAt, id)` rather than `publishedAt` alone, because
+   * The cursor is `(sort column, id)` rather than the timestamp alone, because
    * timestamps tie and a tie at a page boundary is exactly where a row goes
-   * missing.
+   * missing. `id` is a UUIDv7, so ordering on it descending is a stable
+   * tiebreak rather than an arbitrary one.
+   *
+   * Bounded by `limit`, which `parsePageSize` has already clamped.
    */
-  listPublic(input: { limit: number; cursor?: { publishedAt: Date; id: string } }) {
+  listPublic(input: {
+    limit: number;
+    sort: ProductSort;
+    cursor?: ProductCursor | null;
+    filters?: PublicListFilters;
+  }) {
+    // The sort chooses the column. The allowlist in the domain module is what
+    // guarantees it is one of these two and not a string from a query string.
+    const sortColumn =
+      input.sort === "recently-updated"
+        ? products.updatedAt
+        : products.publishedAt;
+
     const keyset = input.cursor
       ? or(
-          lt(products.publishedAt, input.cursor.publishedAt),
+          lt(sortColumn, input.cursor.sortedAt),
           and(
-            eq(products.publishedAt, input.cursor.publishedAt),
+            eq(sortColumn, input.cursor.sortedAt),
             lt(products.id, input.cursor.id)
           )
         )
       : undefined;
 
+    const conditions: (SQL | undefined)[] = [publiclyVisibleProduct, keyset];
+
+    if (input.filters?.failureStatus) {
+      conditions.push(eq(products.failureStatus, input.filters.failureStatus));
+    }
+    if (input.filters?.categoryId) {
+      conditions.push(eq(products.categoryId, input.filters.categoryId));
+    }
+
     return this.db
-      .select(publicColumns)
+      .select(listColumns)
       .from(products)
-      .where(and(publiclyVisibleProduct, keyset))
-      .orderBy(desc(products.publishedAt), desc(products.id))
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...conditions))
+      .orderBy(desc(sortColumn), desc(products.id))
       .limit(input.limit);
+  }
+
+  /**
+   * How many publicly visible products each category holds.
+   *
+   * Filtered by the same visibility predicate as the list, so a category can
+   * never advertise a count that includes rows nobody is allowed to open. The
+   * join is `LEFT` on purpose: a category with nothing visible in it comes back
+   * as zero rather than vanishing, because "no products yet" and "no such
+   * category" are different facts and the page says different things about them.
+   */
+  countPublicByCategory() {
+    return this.db
+      .select({
+        id: categories.id,
+        slug: categories.slug,
+        name: categories.name,
+        description: categories.description,
+        productCount: sql<number>`count(${products.id})::int`,
+      })
+      .from(categories)
+      .leftJoin(
+        products,
+        and(eq(products.categoryId, categories.id), publiclyVisibleProduct)
+      )
+      .groupBy(
+        categories.id,
+        categories.slug,
+        categories.name,
+        categories.description
+      )
+      .orderBy(asc(categories.name));
+  }
+
+  /**
+   * A page of search results, ranked by relevance.
+   *
+   * Separate from `listPublic` rather than a flag on it, because the ordering
+   * is genuinely different: a browse list is chronological and keyset
+   * paginated, a search is ranked and is not. Folding both into one method
+   * would mean a `cursor` parameter that silently does nothing half the time.
+   *
+   * **One bounded page, no cursor.** A rank-keyset cursor is real work, and the
+   * directory targets 50–100 listings before launch (`docs/ROADMAP.md` Phase
+   * 4.5) — a relevance page that overflows 48 results is a problem this corpus
+   * does not have yet. `CLAUDE.md` §7: the measurement comes first, then the
+   * machinery. The caller is expected to tell the visitor the results are
+   * capped rather than pretend there is nothing more.
+   *
+   * The visibility predicate is the same one every other public read uses. A
+   * search that could surface a hidden product would be the most direct
+   * possible leak: it takes a text query, not a guessed URL.
+   */
+  searchPublic(input: {
+    term: string;
+    limit: number;
+    filters?: PublicListFilters;
+  }) {
+    const query = searchQuery(input.term);
+
+    const conditions: (SQL | undefined)[] = [
+      publiclyVisibleProduct,
+      sql`${products.searchVector} @@ ${query}`,
+    ];
+
+    if (input.filters?.failureStatus) {
+      conditions.push(eq(products.failureStatus, input.filters.failureStatus));
+    }
+    if (input.filters?.categoryId) {
+      conditions.push(eq(products.categoryId, input.filters.categoryId));
+    }
+
+    return this.db
+      .select(listColumns)
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...conditions))
+      // ts_rank_cd, not ts_rank: it accounts for how close the matched terms
+      // are to each other, which is what separates a product about one subject
+      // from a paragraph that happens to mention both words.
+      //
+      // The id breaks ties so the order is at least deterministic between two
+      // equally ranked rows; without it Postgres is free to return them in
+      // either order on successive runs.
+      .orderBy(
+        desc(sql`ts_rank_cd(${products.searchVector}, ${query})`),
+        desc(products.id)
+      )
+      .limit(input.limit);
+  }
+
+  /**
+   * Every publicly visible product, for the sitemap.
+   *
+   * The one query in this file that is deliberately unpaginated, because a
+   * sitemap that stops at page one is a sitemap that hides most of the site.
+   * It is still bounded by `limit`, and the caller states the bound — an
+   * unbounded read on a metered database is not made safe by being infrequent.
+   *
+   * The same visibility predicate as everything else. A sitemap listing a
+   * hidden product hands a crawler the URL of something a moderator removed,
+   * which is worse than a leak on a page nobody linked to.
+   */
+  listAllPublicForSitemap(limit: number) {
+    return this.db
+      .select({
+        slug: products.slug,
+        updatedAt: products.updatedAt,
+      })
+      .from(products)
+      .where(publiclyVisibleProduct)
+      .orderBy(desc(products.updatedAt))
+      .limit(limit);
+  }
+
+  /** One category by its public slug, or null. Drives the 404 on an unknown one. */
+  async findCategoryBySlug(slug: string) {
+    const [row] = await this.db
+      .select({
+        id: categories.id,
+        slug: categories.slug,
+        name: categories.name,
+        description: categories.description,
+      })
+      .from(categories)
+      .where(eq(categories.slug, slug))
+      .limit(1);
+
+    return row ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -207,6 +424,7 @@ export class ProductRepository {
     tagline: string | null;
     description: string | null;
     websiteUrl: string | null;
+    categoryId?: string | null;
     failureStatus: FailureStatus;
   }) {
     const [row] = await this.db

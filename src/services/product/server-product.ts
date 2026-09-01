@@ -6,6 +6,7 @@ import {
   changeModerationState as changeModerationStateUseCase,
   changePublicationState as changePublicationStateUseCase,
   createProduct as createProductUseCase,
+  listPublicDirectory as listPublicDirectoryUseCase,
   resolvePublicProduct as resolvePublicProductUseCase,
   updateProduct as updateProductUseCase,
 } from "@/services/product/product-service";
@@ -62,8 +63,30 @@ export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);
 }
 
-export function listPublicProducts(limit = 24) {
-  return repository().listPublic({ limit });
+export function listPublicDirectory(
+  input: Without<Parameters<typeof listPublicDirectoryUseCase>[0]> = {}
+) {
+  return listPublicDirectoryUseCase({ ...input, repository: repository() });
+}
+
+export function listCategoriesWithCounts() {
+  return repository().countPublicByCategory();
+}
+
+export function findCategoryBySlug(slug: string) {
+  return repository().findCategoryBySlug(slug);
+}
+
+/**
+ * Every indexable product URL.
+ *
+ * The bound is stated here rather than left to the caller so no sitemap build
+ * can accidentally ask for the whole table. 5,000 is far above the directory's
+ * near-term size and far below the 50,000-URL limit a sitemap file has, so it
+ * will need revisiting long before either becomes a problem.
+ */
+export function listProductsForSitemap(limit = 5_000) {
+  return repository().listAllPublicForSitemap(limit);
 }
 
 export function listStatusHistory(productId: string) {

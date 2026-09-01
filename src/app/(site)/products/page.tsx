@@ -1,34 +1,47 @@
 // src/app/products/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PackageOpen, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
+import { ProductList } from "@/components/products/product-list";
+import { ProductSearch } from "@/components/products/product-search";
 import { StatusBadge } from "@/components/products/status-badge";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
 import { FAILURE_STATUSES } from "@/domain/product/failure-status";
+import { listPublicDirectory } from "@/services/product/server-product";
 
 export const metadata: Metadata = {
   title: "Products",
   description:
     "Browse products that failed, stalled, or never found traction, and read what their founders learned.",
+  // Always the bare path. ?sort=, ?cursor=, and ?q= render the same listings in
+  // a different order, and each is a duplicate of this page rather than a page
+  // of its own (docs/PRODUCT.md §9).
+  alternates: { canonical: "/products" },
 };
 
-export default function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: PageProps<"/products">) {
+  const params = await searchParams;
+
+  // Every parameter is untrusted: this page is public and unauthenticated. The
+  // service parses each one against the domain allowlists rather than passing
+  // a query string through to a query.
+  const page = await listPublicDirectory({
+    sort: params.sort,
+    cursor: params.cursor,
+    search: params.q,
+  });
+
+  const query = typeof params.q === "string" ? params.q : "";
+
   return (
     <>
       <PageHeader
         title="Products"
-        description="Every listed product, newest first. Each one is published by the person who built it."
+        description="Every listed product. Each one is published by the person who built it."
         breadcrumbs={[{ label: "Home", href: "/" }, { label: "Products" }]}
         actions={
           <Button asChild size="lg" className="h-11">
@@ -39,22 +52,7 @@ export default function ProductsPage() {
 
       <Container className="flex flex-col gap-8 py-10 sm:py-14">
         <div className="flex flex-col gap-4">
-          <div className="relative max-w-md">
-            <label htmlFor="product-search" className="sr-only">
-              Search products
-            </label>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              id="product-search"
-              type="search"
-              placeholder="Search is not wired up yet"
-              className="h-11 pl-9"
-              disabled
-            />
-          </div>
+          <ProductSearch initialQuery={query} />
 
           <ul className="flex flex-wrap items-center gap-2">
             {FAILURE_STATUSES.map((status) => (
@@ -70,21 +68,16 @@ export default function ProductsPage() {
           </ul>
         </div>
 
-        <Empty className="border py-16">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PackageOpen />
-            </EmptyMedia>
-            <EmptyTitle>No products listed yet</EmptyTitle>
-            <EmptyDescription>
-              The directory is empty because submissions are not open. Someone
-              has to fail first, and it may as well be on purpose.
-            </EmptyDescription>
-          </EmptyHeader>
-          <Button asChild variant="outline" className="h-10">
-            <Link href="/submit">Be the first listing</Link>
-          </Button>
-        </Empty>
+        <ProductList
+          items={page.items}
+          sort={page.sort}
+          nextCursor={page.nextCursor}
+          search={page.search}
+          truncated={page.truncated}
+          basePath="/products"
+          emptyTitle="No products listed yet"
+          emptyDescription="The directory is empty because nobody has published a listing. Someone has to fail first, and it may as well be on purpose."
+        />
       </Container>
     </>
   );

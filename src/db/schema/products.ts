@@ -1,6 +1,8 @@
 // src/db/schema/products.ts
 import { sql } from "drizzle-orm";
 import {
+  check,
+  customType,
   index,
   pgTable,
   primaryKey,
@@ -21,6 +23,18 @@ import {
 } from "@/db/schema/enums";
 import { categories, tags } from "@/db/schema/taxonomy";
 import { users } from "@/db/schema/users";
+
+/**
+ * `tsvector`, which Drizzle has no built-in type for.
+ *
+ * Declared here rather than left out of the schema so `drizzle-kit generate`
+ * does not see the column as drift and try to drop it on the next migration.
+ */
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType() {
+    return "tsvector";
+  },
+});
 
 /**
  * A listed product.
@@ -74,6 +88,23 @@ export const products = pgTable(
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+
+    /**
+     * Full-text search over the product's own words (Phase 2 slice 2.4).
+     *
+     * Postgres, not a search service. `CLAUDE.md` §7 forbids Stage 2
+     * infrastructure without a measurement proving the need, and a directory
+     * targeting 50–100 listings before launch has not measured anything that
+     * Postgres cannot do.
+     *
+     * A **generated** column, not a trigger and not application code: it cannot
+     * go stale, because there is no code path that updates the row without
+     * updating it. The weights are `setweight`'s, so a query matching a product
+     * name outranks the same word buried in a paragraph.
+     */
+    searchVector: tsvector("search_vector").generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', coalesce(name, '')), 'A') || setweight(to_tsvector('english', coalesce(tagline, '')), 'B') || setweight(to_tsvector('english', coalesce(description, '')), 'C')`
+    ),
   },
   (table) => [
     uniqueIndex("products_slug_key").on(table.slug),
@@ -86,6 +117,21 @@ export const products = pgTable(
       table.publishedAt
     ),
     index("products_failure_status_idx").on(table.failureStatus),
+    // GIN, not GiST: this index is read far more than it is written, and GIN
+    // answers a tsvector match faster at the cost of a slower update.
+    index("products_search_idx").using("gin", table.searchVector),
+    // A published listing always knows when it went public.
+    //
+    // The public list is keyset-paginated on `published_at` (slice 2.1), and a
+    // NULL sorts outside that ordering — the row would appear on page 1 and
+    // then be unreachable from the cursor, which reads as a product silently
+    // disappearing rather than as the data defect it is. `changePublicationState`
+    // already stamps the column on the first publish; this makes that an
+    // invariant the database holds rather than one the service remembers.
+    check(
+      "products_published_at_required",
+      sql`${table.publicationState} <> 'PUBLISHED' OR ${table.publishedAt} IS NOT NULL`
+    ),
   ]
 );
 
