@@ -39,19 +39,32 @@ while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
   esac
 
   if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
-    # New branch on the remote. Verify every commit the remote does not already have —
-    # never just the tip, or a branch created from a secret would push unexamined.
-    BASE=""
-    if git rev-parse --verify "$REMOTE_NAME/main" >/dev/null 2>&1; then
-      BASE="$(git merge-base "$LOCAL_SHA" "$REMOTE_NAME/main" 2>/dev/null || true)"
-    fi
-    if [ -z "$BASE" ]; then
-      # Nothing on the remote to anchor against: take the parent of the oldest
-      # commit the remote lacks, and fall back to whole-history when that is a root.
-      OLDEST_NEW="$(git rev-list "$LOCAL_SHA" --not --remotes="$REMOTE_NAME" 2>/dev/null | tail -1)"
-      [ -n "$OLDEST_NEW" ] && BASE="$(git rev-parse --verify "${OLDEST_NEW}^" 2>/dev/null || true)"
-    fi
-    # A bare sha tells verify-changes.sh to scan the whole history of that commit.
+    # New branch on the remote. Verify every commit the remote does not already
+    # have — never just the tip, or a branch created from a secret would push
+    # unexamined.
+    #
+    # "What the remote lacks" is asked directly, rather than inferred from a
+    # merge-base with `main`. Anchoring on main was correct when main was the
+    # only integration branch; since 01888bf added `dev` to the promotion path
+    # it is not. A branch cut from `dev` shares every commit `dev` has gained
+    # since main, so a main-anchored range re-audits work that is already
+    # pushed, already reviewed, and not part of this push at all — and blocks
+    # the branch over it. That is not a hypothetical: it blocked
+    # feature/phase-2-public-directory on two merge commits sitting on `dev`.
+    #
+    # Asking `--not --remotes` also covers the case main-anchoring was reaching
+    # for, and more of them: a branch off any published ref anchors correctly,
+    # and a repository with no `main` at all still works.
+    OLDEST_NEW="$(git rev-list "$LOCAL_SHA" --not --remotes="$REMOTE_NAME" 2>/dev/null | tail -1)"
+
+    # Every commit is already on the remote under some other ref. There is
+    # nothing leaving the machine, so there is nothing to inspect.
+    [ -z "$OLDEST_NEW" ] && continue
+
+    # The parent of the oldest new commit is the anchor. When that commit is a
+    # root it has no parent, and a bare sha tells verify-changes.sh to scan the
+    # whole history of that commit — which is the right answer for a first push.
+    BASE="$(git rev-parse --verify "${OLDEST_NEW}^" 2>/dev/null || true)"
     RANGE="${BASE:+$BASE..}$LOCAL_SHA"
   else
     RANGE="$REMOTE_SHA..$LOCAL_SHA"

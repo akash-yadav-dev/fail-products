@@ -98,6 +98,16 @@ jobs:
           chmod +x scripts/test-verify-changes.sh
           bash scripts/test-verify-changes.sh
 
+      - name: Test the pre-push hook itself
+        run: |
+          # The hook decides which commits the gate ever sees, so a wrong range
+          # is a gate that ran and proved nothing about the commits that
+          # mattered. It anchored new branches on `main` after `dev` became an
+          # integration branch, which re-audited already-published commits and
+          # blocked branches over them. Same reasoning as the suite above.
+          chmod +x scripts/test-pre-push.sh
+          bash scripts/test-pre-push.sh
+
       - name: Check documentation links
         run: |
           # Every relative markdown link must resolve. Broken links are how a
