@@ -94,6 +94,22 @@ export type PublicListFilters = {
   categoryId?: string;
 };
 
+/**
+ * The tsquery a search runs.
+ *
+ * `websearch_to_tsquery`, not `to_tsquery`. It is the only one of the family
+ * built for raw user input: it accepts quoted phrases and `-exclusion` the way
+ * a visitor expects, and it never raises a syntax error on unbalanced quotes or
+ * stray operators. `to_tsquery('english', 'a & & b')` throws, and a thrown
+ * query on a public search box is a 500 anyone can trigger by typing.
+ *
+ * The value is a bound parameter. Sanitising a string is never what makes a
+ * query injection-safe, and nothing in this file pretends otherwise.
+ */
+function searchQuery(term: string) {
+  return sql`websearch_to_tsquery('english', ${term})`;
+}
+
 export class ProductRepository {
   constructor(private readonly db: Database) {}
 
@@ -257,6 +273,63 @@ export class ProductRepository {
         categories.description
       )
       .orderBy(asc(categories.name));
+  }
+
+  /**
+   * A page of search results, ranked by relevance.
+   *
+   * Separate from `listPublic` rather than a flag on it, because the ordering
+   * is genuinely different: a browse list is chronological and keyset
+   * paginated, a search is ranked and is not. Folding both into one method
+   * would mean a `cursor` parameter that silently does nothing half the time.
+   *
+   * **One bounded page, no cursor.** A rank-keyset cursor is real work, and the
+   * directory targets 50–100 listings before launch (`docs/ROADMAP.md` Phase
+   * 4.5) — a relevance page that overflows 48 results is a problem this corpus
+   * does not have yet. `CLAUDE.md` §7: the measurement comes first, then the
+   * machinery. The caller is expected to tell the visitor the results are
+   * capped rather than pretend there is nothing more.
+   *
+   * The visibility predicate is the same one every other public read uses. A
+   * search that could surface a hidden product would be the most direct
+   * possible leak: it takes a text query, not a guessed URL.
+   */
+  searchPublic(input: {
+    term: string;
+    limit: number;
+    filters?: PublicListFilters;
+  }) {
+    const query = searchQuery(input.term);
+
+    const conditions: (SQL | undefined)[] = [
+      publiclyVisibleProduct,
+      sql`${products.searchVector} @@ ${query}`,
+    ];
+
+    if (input.filters?.failureStatus) {
+      conditions.push(eq(products.failureStatus, input.filters.failureStatus));
+    }
+    if (input.filters?.categoryId) {
+      conditions.push(eq(products.categoryId, input.filters.categoryId));
+    }
+
+    return this.db
+      .select(listColumns)
+      .from(products)
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(...conditions))
+      // ts_rank_cd, not ts_rank: it accounts for how close the matched terms
+      // are to each other, which is what separates a product about one subject
+      // from a paragraph that happens to mention both words.
+      //
+      // The id breaks ties so the order is at least deterministic between two
+      // equally ranked rows; without it Postgres is free to return them in
+      // either order on successive runs.
+      .orderBy(
+        desc(sql`ts_rank_cd(${products.searchVector}, ${query})`),
+        desc(products.id)
+      )
+      .limit(input.limit);
   }
 
   /** One category by its public slug, or null. Drives the 404 on an unknown one. */

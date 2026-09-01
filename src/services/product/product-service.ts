@@ -12,6 +12,7 @@ import {
   type ProductSort,
 } from "@/domain/product/listing";
 import { authorize, type Viewer } from "@/domain/product/permissions";
+import { parseSearchQuery } from "@/domain/product/search";
 import { slugCandidates } from "@/domain/product/slug";
 import {
   canTransitionFailureStatus,
@@ -374,12 +375,30 @@ export async function listPublicDirectory(input: {
   sort?: unknown;
   cursor?: unknown;
   pageSize?: unknown;
+  search?: unknown;
   failureStatus?: FailureStatus;
   categoryId?: string;
 }) {
   const sort = parseProductSort(input.sort);
   const cursor = decodeProductCursor(input.cursor);
   const limit = parsePageSize(input.pageSize);
+  const search = parseSearchQuery(input.search);
+
+  // A search is a different query, not a filtered browse: ranked instead of
+  // chronological, and one bounded page instead of a keyset walk. Branching
+  // here keeps the cursor from being a parameter that silently does nothing.
+  if (search) {
+    const items = await input.repository.searchPublic({
+      term: search,
+      limit,
+      filters: {
+        failureStatus: input.failureStatus,
+        categoryId: input.categoryId,
+      },
+    });
+
+    return { items, sort, search, nextCursor: null, truncated: items.length >= limit };
+  }
 
   // One more row than the page shows. That extra row is the whole answer to "is
   // there another page?", so the alternative — a second COUNT over the same
@@ -405,6 +424,8 @@ export async function listPublicDirectory(input: {
   return {
     items,
     sort,
+    search,
+    truncated: false,
     // `publishedAt` is non-null on every publicly visible row — migration 0005
     // makes that a CHECK constraint rather than a convention — so this guard is
     // the type system's price for the column being nullable in general, not a

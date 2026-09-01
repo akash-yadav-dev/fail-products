@@ -1,6 +1,6 @@
 // src/components/products/product-list.tsx
 import Link from "next/link";
-import { PackageOpen } from "lucide-react";
+import { PackageOpen, SearchX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,10 @@ export type ProductListProps = {
   basePath: string;
   /** Query parameters to carry across a sort change or a page step. */
   preservedParams?: Record<string, string>;
+  /** The active search term, if the list is showing search results. */
+  search?: string | null;
+  /** Whether a ranked search filled its one bounded page. */
+  truncated?: boolean;
   emptyTitle: string;
   emptyDescription: string;
 };
@@ -71,21 +75,36 @@ export function ProductList({
   nextCursor,
   basePath,
   preservedParams = {},
+  search = null,
+  truncated = false,
   emptyTitle,
   emptyDescription,
 }: ProductListProps) {
   if (items.length === 0) {
+    // "No results for that search" and "the directory is empty" are different
+    // facts, and showing the second one to someone who mistyped a word is how a
+    // directory with listings in it looks abandoned.
+    const noResults = Boolean(search);
+
     return (
       <Empty className="border py-16">
         <EmptyHeader>
           <EmptyMedia variant="icon">
-            <PackageOpen />
+            {noResults ? <SearchX /> : <PackageOpen />}
           </EmptyMedia>
-          <EmptyTitle>{emptyTitle}</EmptyTitle>
-          <EmptyDescription>{emptyDescription}</EmptyDescription>
+          <EmptyTitle>
+            {noResults ? `Nothing matches "${search}"` : emptyTitle}
+          </EmptyTitle>
+          <EmptyDescription>
+            {noResults
+              ? "Try fewer words, or browse the whole directory."
+              : emptyDescription}
+          </EmptyDescription>
         </EmptyHeader>
         <Button asChild variant="outline" className="h-10">
-          <Link href="/submit">Submit a product</Link>
+          <Link href={noResults ? basePath : "/submit"}>
+            {noResults ? "Clear search" : "Submit a product"}
+          </Link>
         </Button>
       </Empty>
     );
@@ -93,7 +112,27 @@ export function ProductList({
 
   return (
     <div className="flex flex-col gap-6">
-      <nav aria-label="Sort products" className="flex flex-wrap items-center gap-2">
+      {search ? (
+        // Ranked by relevance, so the chronological sorts do not apply and the
+        // control is not rendered rather than rendered and ignored.
+        <p className="text-sm text-muted-foreground" role="status">
+          {items.length} result{items.length === 1 ? "" : "s"} for{" "}
+          <strong className="font-medium text-foreground">{search}</strong>
+          {truncated ? ", best matches first. Narrow the search to see more." : ", best matches first."}{" "}
+          <Link
+            href={basePath}
+            className="rounded-sm underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            Clear
+          </Link>
+        </p>
+      ) : null}
+
+      <nav
+        aria-label="Sort products"
+        hidden={Boolean(search)}
+        className="flex flex-wrap items-center gap-2"
+      >
         <span className="text-sm text-muted-foreground">Sort</span>
         {PRODUCT_SORTS.map((option) => {
           const isCurrent = option.value === sort;

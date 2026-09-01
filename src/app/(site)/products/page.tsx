@@ -1,11 +1,10 @@
 // src/app/products/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ProductList } from "@/components/products/product-list";
+import { ProductSearch } from "@/components/products/product-search";
 import { StatusBadge } from "@/components/products/status-badge";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -29,7 +28,10 @@ export default async function ProductsPage({
   const page = await listPublicDirectory({
     sort: params.sort,
     cursor: params.cursor,
+    search: params.q,
   });
+
+  const query = typeof params.q === "string" ? params.q : "";
 
   return (
     <>
@@ -46,22 +48,7 @@ export default async function ProductsPage({
 
       <Container className="flex flex-col gap-8 py-10 sm:py-14">
         <div className="flex flex-col gap-4">
-          <div className="relative max-w-md">
-            <label htmlFor="product-search" className="sr-only">
-              Search products
-            </label>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              id="product-search"
-              type="search"
-              placeholder="Search is not wired up yet"
-              className="h-11 pl-9"
-              disabled
-            />
-          </div>
+          <ProductSearch initialQuery={query} />
 
           <ul className="flex flex-wrap items-center gap-2">
             {FAILURE_STATUSES.map((status) => (
@@ -81,6 +68,8 @@ export default async function ProductsPage({
           items={page.items}
           sort={page.sort}
           nextCursor={page.nextCursor}
+          search={page.search}
+          truncated={page.truncated}
           basePath="/products"
           emptyTitle="No products listed yet"
           emptyDescription="The directory is empty because nobody has published a listing. Someone has to fail first, and it may as well be on purpose."
