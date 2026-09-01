@@ -93,7 +93,7 @@ key prefixes.
 
 ## 5. Documentation is the source of truth
 
-The repository is currently **pre-implementation**. Documentation in [`docs/`](docs/)
+Implementation is underway in [`src/`](src/). Documentation in [`docs/`](docs/) still
 defines the system; code must follow it, not the reverse.
 
 - A change that contradicts a doc requires the doc to change **in the same PR**.
