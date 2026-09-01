@@ -15,11 +15,14 @@ import {
 } from "@/components/products/source-tier";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
+import { BreadcrumbJsonLd } from "@/components/shared/structured-data";
 import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
 import { OWNER_SUPPLIED_TIER } from "@/domain/product/source-tier";
 import { OUTBOUND_CAMPAIGNS, buildOutboundProductUrl } from "@/lib/urls/outbound";
+import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { externalUrlHost } from "@/lib/validation/url";
 import {
+  listProductsForSitemap,
   listPublicDirectory,
   resolvePublicProduct,
 } from "@/services/product/server-product";
@@ -38,6 +41,44 @@ import {
  * businesses, and an unattributed sentence here reads as FailProducts asserting
  * a fact about someone else's company.
  */
+
+/**
+ * Cached for five minutes, then revalidated.
+ *
+ * `docs/DEPLOYMENT.md` §11 makes the cache hit ratio on this route a
+ * launch-blocking metric: Neon's free plan allows 5 GB of egress a month, and
+ * an uncached product page queries the database on every crawler and every
+ * visitor. This page takes no query parameters, so it is the one public route
+ * that can be cached wholesale — and it is also the highest-volume one.
+ *
+ * Five minutes rather than an hour because an owner who fixes a typo should see
+ * it, and because the window is short enough that it needs no explicit
+ * invalidation on publish — which `docs/ARCHITECTURE.md` §5 would otherwise
+ * require, and which is a Phase 3 concern once comment counts appear.
+ */
+export const revalidate = 300;
+
+/**
+ * Prerender the listings that exist at build time.
+ *
+ * Without this the route is rendered on demand and `revalidate` above does
+ * nothing — verified by inspecting `Cache-Control` on three consecutive
+ * requests to a built server, which returned `private, no-cache, no-store`
+ * until these params existed. That is the difference between a product page
+ * that queries Neon on every crawler hit and one that does not, which
+ * `docs/DEPLOYMENT.md` §11 calls a launch-blocking metric.
+ *
+ * A slug published after the build is still served: `dynamicParams` defaults to
+ * true, so an unlisted slug renders on demand and is then cached like the rest.
+ */
+export async function generateStaticParams() {
+  // CI builds without a database on purpose. An empty list is correct there:
+  // every page is then served on demand, which is what happens today anyway.
+  if (canSkipDatabaseAtBuild()) return [];
+
+  const products = await listProductsForSitemap(1_000);
+  return products.map((product) => ({ slug: product.slug }));
+}
 
 export async function generateMetadata({
   params,
@@ -108,6 +149,19 @@ export default async function ProductPage({
 
   return (
     <>
+      {/*
+        The trail already in the header, machine-readable. Nothing else about
+        this product is marked up: see src/components/shared/structured-data.tsx
+        for why a Review or a Product with offers would be a fabrication.
+      */}
+      <BreadcrumbJsonLd
+        items={[
+          { name: "Home", path: "/" },
+          { name: "Products", path: "/products" },
+          { name: product.name },
+        ]}
+      />
+
       <PageHeader
         title={product.name}
         description={product.tagline ?? undefined}

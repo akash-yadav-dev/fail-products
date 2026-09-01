@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/card";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
+import { canSkipDatabaseAtBuild } from "@/lib/config/database";
+import { PRODUCT_CATEGORIES } from "@/domain/product/category";
 import { listCategoriesWithCounts } from "@/services/product/server-product";
 
 export const metadata: Metadata = {
@@ -20,6 +22,13 @@ export const metadata: Metadata = {
     "Browse failed and struggling products by what they were: the category tells you who else tried this.",
   alternates: { canonical: "/categories" },
 };
+
+/**
+ * Regenerated hourly. Prerendered once, the counts would be frozen at whatever
+ * they were on the day of the deploy, and a category page reachable from a
+ * "0 listings" card is worse than no count at all.
+ */
+export const revalidate = 3600;
 
 /**
  * The category index.
@@ -33,7 +42,12 @@ export const metadata: Metadata = {
  * hiding the row would instead suggest the category does not exist.
  */
 export default async function CategoriesPage() {
-  const categories = await listCategoriesWithCounts();
+  // CI builds without a database on purpose, so a prerender there falls back to
+  // the curated list with no counts rather than failing the build. A deployed
+  // build has DATABASE_URL and prerenders the real numbers.
+  const categories = canSkipDatabaseAtBuild()
+    ? PRODUCT_CATEGORIES.map((category) => ({ ...category, productCount: 0 }))
+    : await listCategoriesWithCounts();
 
   return (
     <>

@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: "Status",
   description:
     "Struggling, low traction, abandoned, shut down, recovering. What each product status means on FailProducts.",
+  alternates: { canonical: "/status" },
 };
 
 export default function StatusIndexPage() {
