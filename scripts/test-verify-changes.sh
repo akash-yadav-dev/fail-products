@@ -166,6 +166,37 @@ else
   echo "  FAIL  CI incorrectly blocks protected main (exit $code)"; FAIL=$((FAIL+1))
 fi
 
+# dev is the integration branch, not a working branch. It is pushed to by merge
+# only, exactly like main, so the same guard has to cover it.
+git checkout -q -B dev baseline 2>/dev/null; git clean -qfd 2>/dev/null
+echo x >> docs/README.md
+out="$(bash scripts/verify-changes.sh 2>&1)"; code=$?
+if printf '%s' "$out" | grep -qF "dev is protected" && [ "$code" -eq 1 ]; then
+  echo "  PASS  working on dev is blocked"; PASS=$((PASS+1))
+else
+  echo "  FAIL  working on dev not blocked (exit $code)"; FAIL=$((FAIL+1))
+fi
+
+out="$(bash scripts/verify-changes.sh --ci 2>&1)"; code=$?
+if ! printf '%s' "$out" | grep -qF "dev is protected" && [ "$code" -eq 0 ]; then
+  echo "  PASS  CI observes dev without blocking"; PASS=$((PASS+1))
+else
+  echo "  FAIL  CI incorrectly blocks protected dev (exit $code)"; FAIL=$((FAIL+1))
+fi
+
+# A feature branch measures itself against dev once dev exists, so the radius
+# reflects what this branch adds rather than replaying everything already merged.
+git checkout -q -B feature/base-ref dev 2>/dev/null; git clean -qfd 2>/dev/null
+echo "//x" >> src/domain/product/slug.ts
+git add -A >/dev/null 2>&1
+git commit -q -s -m "test: base ref" --no-verify >/dev/null 2>&1
+out="$(bash scripts/verify-changes.sh 2>&1)"; code=$?
+if printf '%s' "$out" | grep -qF "feature/base-ref -> dev"; then
+  echo "  PASS  feature branch measured against dev"; PASS=$((PASS+1))
+else
+  echo "  FAIL  feature branch not measured against dev (exit $code)"; FAIL=$((FAIL+1))
+fi
+
 echo
 echo "======================================"
 printf '  PASS: %d   FAIL: %d\n' "$PASS" "$FAIL"

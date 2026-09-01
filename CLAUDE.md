@@ -43,19 +43,24 @@ config happens to hold; the setup script overrides it per-repo so it never reach
 
 ## 2. Branch protection
 
-`main` is protected. No agent pushes to `main` directly, ever.
+`main` and `dev` are both protected. No agent pushes to either directly, ever.
 
 ```
 feature/* | fix/* | docs/* | security/*
         ↓
-        PR
+        PR  ->  status checks  ->  owner review + approval
         ↓
-  owner review + approval        <- required, cannot be self-bypassed by an agent
+      dev            <- integration; verified here before it can go further
         ↓
-      status checks pass
+        PR  ->  status checks  ->  owner review + approval
         ↓
-      merge to main
+      main           <- the release branch
 ```
+
+`dev` is an integration branch, not a working branch: it is written to by merge only.
+`main` accepts merges **from `dev` only**, so nothing reaches the release branch that
+was not first integrated and verified. No deployment is attached to either branch yet —
+see [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
 
 Agents open PRs. Agents do not approve, merge, or force-push. Configuration lives in
 [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
