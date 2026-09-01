@@ -155,6 +155,44 @@ test.describe("the public directory", () => {
     }
   });
 
+  test("searches, then clears back to the full list", async ({ page }) => {
+    await page.goto("/products");
+
+    const search = page.getByRole("searchbox", { name: "Search products" });
+    // A distinctive word from the seeded listing's tagline, so the match comes
+    // from full-text search rather than from the product happening to be first.
+    await search.fill("runway");
+
+    // Debounced, so the navigation is not immediate. Waiting on the URL rather
+    // than on a timeout is what keeps this from being flaky on a slow machine.
+    await page.waitForURL(/\?q=runway/);
+    await expect(page.getByRole("link", { name: seeded.name })).toBeVisible();
+    await expect(page.getByText(/best matches first/i)).toBeVisible();
+
+    await page.getByRole("link", { name: "Clear" }).click();
+    await expect(page).toHaveURL("/products");
+    await expect(page.getByRole("link", { name: seeded.name })).toBeVisible();
+  });
+
+  test("says nothing matched rather than that the directory is empty", async ({
+    page,
+  }) => {
+    // Showing "no products listed yet" to someone who mistyped a word is how a
+    // directory with listings in it comes to look abandoned.
+    await page.goto("/products?q=zzzzqqqqnothingmatchesthis");
+
+    await expect(page.getByText(/Nothing matches/i)).toBeVisible();
+    await expect(page.getByText(/No products listed yet/i)).toHaveCount(0);
+  });
+
+  test("survives a query that would break a naive tsquery", async ({ page }) => {
+    // to_tsquery would raise on this; websearch_to_tsquery does not. A 500 that
+    // anyone can trigger by typing is not an edge case.
+    const response = await page.goto("/products?q=" + encodeURIComponent("a & & b"));
+
+    expect(response?.status()).toBe(200);
+  });
+
   test("indexes a product page that now carries real content", async ({
     page,
   }) => {
