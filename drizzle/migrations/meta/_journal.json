@@ -43,6 +43,13 @@
       "when": 1788256204382,
       "tag": "0005_unusual_xavin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788257256035,
+      "tag": "0006_seed_categories",
+      "breakpoints": true
     }
   ]
 }

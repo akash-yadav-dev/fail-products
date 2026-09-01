@@ -38,6 +38,7 @@ export async function submitProductAction(
       tagline: String(formData.get("tagline") ?? ""),
       description: String(formData.get("description") ?? ""),
       websiteUrl: String(formData.get("websiteUrl") ?? ""),
+      categorySlug: String(formData.get("categorySlug") ?? ""),
       failureStatus: failureStatus as FailureStatus,
     });
     slug = created.slug;
@@ -59,6 +60,8 @@ function messageFor(code: ProductError["code"]): string {
       return "Give the product a name, up to 120 characters.";
     case "INVALID_URL":
       return "The website link must start with http:// or https://.";
+    case "INVALID_CATEGORY":
+      return "Pick a category from the list.";
     case "SLUG_EXHAUSTED":
       return "That name is heavily used. Try a more specific one.";
     default:
