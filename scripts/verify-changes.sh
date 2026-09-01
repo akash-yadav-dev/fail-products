@@ -18,6 +18,9 @@
 set -uo pipefail
 
 ALLOWED_EMAIL="180740493+akash-yadav-dev@users.noreply.github.com"
+# Neither may be pushed to directly. Work reaches dev by pull request, and main
+# only from dev. .github/BRANCH-PROTECTION.md
+PROTECTED_BRANCHES="main dev"
 BASE_REF_DEFAULT="origin/main"
 LARGE_FILE_KB=500
 
@@ -68,6 +71,24 @@ cd "$REPO_ROOT" || exit 2
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 HAS_COMMITS=0
 git rev-parse --verify HEAD >/dev/null 2>&1 && HAS_COMMITS=1
+
+# Which branch this one merges into, so "what changed" is measured against the
+# thing it will actually be diffed against in review.
+#
+# Feature branches integrate into dev; dev integrates into main. Reporting a
+# feature branch against main would replay every commit already sitting on dev
+# and inflate the impact radius with work that was reviewed weeks ago.
+#
+# Each candidate is checked for existence: dev does not exist in a fresh clone
+# of a repository that has not adopted it yet, and the gate must still run.
+if [ "$BRANCH" != "dev" ]; then
+  for candidate in origin/dev dev origin/main main; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then
+      BASE_REF_DEFAULT="$candidate"
+      break
+    fi
+  done
+fi
 
 # git's well-known empty tree object: the only base that includes a root commit.
 EMPTY_TREE="$(git hash-object -t tree /dev/null)"
@@ -283,14 +304,19 @@ fi
 head2 "SAFETY CHECKS"
 
 # --- Branch protection -----------------------------------------------------
-if [ "$BRANCH" = "main" ] && [ "$CI_MODE" -eq 0 ]; then
-  fail "on branch 'main' — main is protected; branch first (CLAUDE.md §2)"
-elif [ "$BRANCH" = "main" ]; then
-  # CI runs after a protected merge has landed. The repository setting, not
-  # this post-push observer, prevents direct pushes to main.
-  note "  branch                 main observed in CI (server-side protection applies)"
+IS_PROTECTED=0
+for protected in $PROTECTED_BRANCHES; do
+  [ "$BRANCH" = "$protected" ] && IS_PROTECTED=1
+done
+
+if [ "$IS_PROTECTED" -eq 1 ] && [ "$CI_MODE" -eq 0 ]; then
+  fail "on branch '$BRANCH' — $BRANCH is protected; branch first (CLAUDE.md §2)"
+elif [ "$IS_PROTECTED" -eq 1 ]; then
+  # CI runs after a protected merge has landed. The repository ruleset, not this
+  # post-push observer, is what prevents the direct push.
+  note "  branch                 $BRANCH observed in CI (server-side protection applies)"
 else
-  note "  branch                 ok ($BRANCH)"
+  note "  branch                 ok ($BRANCH -> ${BASE_REF_DEFAULT#origin/})"
 fi
 
 # --- Environment files -----------------------------------------------------

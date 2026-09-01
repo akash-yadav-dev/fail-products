@@ -1,0 +1,38 @@
+name: Setup
+description: Enable pnpm, install Node from .nvmrc, and install dependencies from the lockfile.
+
+# Four jobs repeated these same four steps. Repetition in CI is not just noise:
+# when the Node version or the install flags drift between jobs, the failure
+# looks like a flaky test rather than the configuration mismatch it is.
+#
+# Checkout stays in the caller. The hygiene job needs full history to diff
+# against its base branch, and burying that in a shared action would hide it.
+
+inputs:
+  install:
+    description: Install dependencies. Set false for a job that only needs a runtime.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # corepack ships with Node, so pnpm needs no third-party action and adds no
+    # supply-chain surface. .github/BRANCH-PROTECTION.md
+    - name: Enable pnpm
+      shell: bash
+      run: corepack enable
+
+    - name: Setup Node
+      # actions/setup-node v6
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+
+    - name: Install
+      if: inputs.install == 'true'
+      shell: bash
+      # --frozen-lockfile: CI installs what was reviewed, and fails if the
+      # lockfile and package.json disagree rather than quietly resolving anew.
+      run: pnpm install --frozen-lockfile
