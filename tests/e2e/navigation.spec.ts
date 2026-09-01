@@ -11,6 +11,20 @@ import { expect, test } from "@playwright/test";
 /** Tailwind `md`. Below it the header swaps MainNav for MobileNav. */
 const MD = 768;
 
+/**
+ * Phase 2 turned several of these routes from static pages into database reads.
+ *
+ * `/products` and `/status/[slug]` rendered from a domain enum and an empty
+ * state before; they now query. Without a database they return 500, which is
+ * correct — a deployed environment always has DATABASE_URL, and a site quietly
+ * rendering an empty directory instead of erroring is the silent failure
+ * `docs/ENGINEERING.md` §1.9 forbids. So the tests that need data say so.
+ *
+ * `/categories` is not in that set: it is prerendered with `revalidate`, so the
+ * build-time fallback is served and it still answers 200 here.
+ */
+const noDatabase = !process.env.DATABASE_URL;
+
 function isMobile(width: number | undefined): boolean {
   return (width ?? MD) < MD;
 }
@@ -38,14 +52,18 @@ test.describe("the home page", () => {
 
 test.describe("the header navigation", () => {
   const sections = [
-    { label: "Products", path: "/products" },
-    { label: "Categories", path: "/categories" },
-    { label: "Status", path: "/status" },
+    { label: "Products", path: "/products", heading: "Products", needsData: true },
+    { label: "Categories", path: "/categories", heading: "Categories", needsData: false },
+    { label: "Status", path: "/status", heading: "Status", needsData: false },
   ] as const;
 
   for (const section of sections) {
     test(`reaches ${section.path}`, async ({ page, viewport }) => {
       test.skip(isMobile(viewport?.width), "MainNav is hidden below md");
+      test.skip(
+        section.needsData && noDatabase,
+        `${section.path} reads the database since Phase 2`
+      );
 
       await page.goto("/");
       await page
@@ -54,7 +72,13 @@ test.describe("the header navigation", () => {
         .click();
 
       await expect(page).toHaveURL(new RegExp(`${section.path}$`));
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // The heading by name, not merely "a level-1 heading exists". The root
+      // error boundary also renders an h1, so the looser assertion passed
+      // against a 500 in CI — a green test on an error page is worse than a red
+      // one, because nothing ever looks at it again.
+      await expect(
+        page.getByRole("heading", { level: 1, name: section.heading })
+      ).toBeVisible();
     });
   }
 
@@ -63,6 +87,7 @@ test.describe("the header navigation", () => {
     viewport,
   }) => {
     test.skip(isMobile(viewport?.width), "MainNav is hidden below md");
+    test.skip(noDatabase, "/products reads the database since Phase 2");
 
     await page.goto("/products");
 
@@ -123,6 +148,10 @@ test.describe("unknown routes", () => {
   });
 
   test("a known failure status resolves", async ({ page }) => {
+    // The 404 above still runs without a database: notFound() fires before the
+    // product query. Rendering the page is what needs one, since Phase 2.
+    test.skip(noDatabase, "/status/[slug] lists products since Phase 2");
+
     const response = await page.goto("/status/shut-down");
 
     expect(response?.status()).toBe(200);
