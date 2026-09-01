@@ -1,6 +1,8 @@
 // drizzle.config.ts
 import { defineConfig } from "drizzle-kit";
 
+import { applyLocalEnv } from "./scripts/load-env.mjs";
+
 /**
  * drizzle-kit is a build-time CLI, never imported from `src/`. It reads
  * DATABASE_URL from the environment; no value is ever committed.
@@ -12,6 +14,8 @@ import { defineConfig } from "drizzle-kit";
  * One migration per logical change, and an applied migration is never edited
  * (docs/ENGINEERING.md §5).
  */
+applyLocalEnv();
+
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema/index.ts",

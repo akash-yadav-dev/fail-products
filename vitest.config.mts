@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
+import { applyLocalEnv } from "./scripts/load-env.mjs";
+
 /**
  * Two projects, because the layers have different requirements.
  *
@@ -15,8 +17,17 @@ import { defineConfig } from "vitest/config";
  *
  *   pnpm test              both projects
  *   pnpm test:unit         the fast loop
- *   pnpm test --project integration
+ *   pnpm test:integration  fails outright if no database is configured
  */
+
+/**
+ * Vitest does not read `.env.local`; Next.js does. That gap meant a developer
+ * with a working DATABASE_URL still watched all 25 integration tests skip, and
+ * `pnpm test:integration` exit 0 having proven nothing about the schema.
+ *
+ * Real environment variables still win — see scripts/load-env.mjs.
+ */
+applyLocalEnv();
 
 /** `@/…` has to resolve here too; projects do not inherit the root resolve config. */
 const alias = {

@@ -82,19 +82,24 @@ failproducts/
 │   │   └── shared/
 │   │
 │   ├── domain/
+│   │   ├── product/            # failure-status, slug, transitions, permissions
+│   │   ├── user/               # username
+│   │   ├── shared/             # reserved-names, shared by all four namespaces
+│   │   ├── comment/
+│   │   ├── waitlist/
+│   │   ├── moderation/
+│   │   └── referral/
+│   │
+│   ├── services/               # one directory per domain, not one file
+│   │   ├── auth/
+│   │   │   ├── auth-service.ts     # use cases; the repository is injected
+│   │   │   └── server-auth.ts      # binds them to getDb() for the app
 │   │   ├── product/
 │   │   ├── user/
 │   │   ├── comment/
 │   │   ├── waitlist/
 │   │   ├── moderation/
 │   │   └── referral/
-│   │
-│   ├── services/
-│   │   ├── product-service.ts
-│   │   ├── comment-service.ts
-│   │   ├── waitlist-service.ts
-│   │   ├── moderation-service.ts
-│   │   └── referral-service.ts
 │   │
 │   ├── repositories/
 │   │   ├── product-repository.ts
@@ -122,6 +127,8 @@ failproducts/
 │   ├── lib/
 │   │   ├── auth/
 │   │   ├── config/
+│   │   ├── forms/               # the shape a Server Action returns to a form
+│   │   ├── ids/
 │   │   ├── validation/
 │   │   ├── urls/
 │   │   ├── security/
@@ -143,7 +150,9 @@ failproducts/
 │   ├── setup-git-identity.ps1
 │   ├── verify-changes.sh        # the gate: what changed, impact radius, is it safe?
 │   ├── verify-changes.ps1
-│   └── test-verify-changes.sh   # regression tests for the gate's own guards
+│   ├── test-verify-changes.sh   # regression tests for the gate's own guards
+│   ├── load-env.mjs             # .env.local for tooling Next.js does not cover
+│   └── require-database.mjs     # makes `pnpm test:integration` fail, not skip
 │
 ├── .env.example                 # names only, never values
 ├── .nvmrc                       # Node version, read by CI and by nvm

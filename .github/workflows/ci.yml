@@ -4,11 +4,15 @@ name: CI
 # bypassed with --no-verify; this cannot. Every check here also runs locally via
 # scripts/verify-changes.sh, so a contributor can reproduce a failure offline.
 
+# Two protected branches, so both sides of the promotion path are gated:
+# feature/* -> PR -> dev -> PR -> main. A change that never passed on dev must
+# not be able to reach main, and the only way to guarantee that is to run the
+# same checks on both. .github/BRANCH-PROTECTION.md
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 # Least privilege by default. Jobs that need more request it explicitly.
 # .github/BRANCH-PROTECTION.md
@@ -146,6 +150,19 @@ jobs:
           done
           exit $status
 
+      - name: Validate workflow definitions
+        run: |
+          # A malformed workflow does not fail loudly — GitHub declines to run it
+          # and the PR simply shows one fewer check than it should, which reads
+          # like a check that has not started yet.
+          status=0
+          for f in .github/workflows/*.yml .github/actions/*/action.yml; do
+            [ -e "$f" ] || continue
+            python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f" \
+              || { echo "::error file=$f::invalid YAML"; status=1; }
+          done
+          exit $status
+
   # ---------------------------------------------------------------------------
   # Detect whether an application exists yet. The repository is currently
   # documentation-only, so the app checks must not fail the build by being absent.
@@ -196,20 +213,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      # corepack ships with Node, so pnpm needs no third-party action and no
-      # extra supply-chain surface. .github/BRANCH-PROTECTION.md
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Setup Node
-        # actions/setup-node v6
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Lint
         run: pnpm lint
@@ -241,17 +246,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Setup Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install browsers
         run: pnpm exec playwright install --with-deps chromium

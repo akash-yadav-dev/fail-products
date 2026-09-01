@@ -13,9 +13,11 @@ import {
 
 import { createdAt, primaryId, updatedAt } from "@/db/schema/columns";
 import {
+  actorRoleEnum,
   failureStatusEnum,
   moderationStateEnum,
   publicationStateEnum,
+  statusAxisEnum,
 } from "@/db/schema/enums";
 import { categories, tags } from "@/db/schema/taxonomy";
 import { users } from "@/db/schema/users";
@@ -120,6 +122,61 @@ export const productSlugHistory = pgTable(
   ]
 );
 
+/**
+ * Every status change a product has ever undergone, on any of the three axes
+ * (ADR-013).
+ *
+ * The point of this table is accountability: a moderator action and an owner
+ * action are both recorded, with who did it and why, so "why is this hidden?"
+ * has an answer that does not depend on anyone's memory.
+ *
+ * `fromValue` and `toValue` are `varchar` rather than enums, which is
+ * deliberate. The three axes have three different value sets, and one column
+ * cannot be three enum types — the `axis` column is what makes a value
+ * interpretable. Postgres would also refuse to drop a value from an enum that a
+ * history row still references, which would make the history table veto every
+ * future change to the states themselves.
+ */
+export const productStatusHistory = pgTable(
+  "product_status_history",
+  {
+    id: primaryId(),
+
+    productId: uuid("product_id")
+      .notNull()
+      // History dies with the product. It exists to explain a listing that is
+      // on the site; retaining moderation records for a deleted listing would
+      // keep personal data past its purpose (docs/LEGAL.md).
+      .references(() => products.id, { onDelete: "cascade" }),
+
+    axis: statusAxisEnum("axis").notNull(),
+
+    /** Null for the row written at creation: there was no previous value. */
+    fromValue: varchar("from_value", { length: 32 }),
+    toValue: varchar("to_value", { length: 32 }).notNull(),
+
+    /** Null once the acting account is deleted. The action still happened. */
+    actorId: uuid("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    actorRole: actorRoleEnum("actor_role").notNull(),
+
+    /** Required by policy for moderation actions; the service enforces that. */
+    reason: text("reason"),
+
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // The timeline query: one product, newest first.
+    index("product_status_history_product_idx").on(
+      table.productId,
+      table.createdAt
+    ),
+    // The moderation audit: everything one moderator did.
+    index("product_status_history_actor_idx").on(table.actorId),
+  ]
+);
+
 /** Products to tags. A join table, so a tag rename never rewrites product rows. */
 export const productTags = pgTable(
   "product_tags",
@@ -140,3 +197,5 @@ export const productTags = pgTable(
 export type ProductRow = typeof products.$inferSelect;
 export type NewProductRow = typeof products.$inferInsert;
 export type ProductSlugHistoryRow = typeof productSlugHistory.$inferSelect;
+export type ProductStatusHistoryRow = typeof productStatusHistory.$inferSelect;
+export type NewProductStatusHistoryRow = typeof productStatusHistory.$inferInsert;
