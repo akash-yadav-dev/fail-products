@@ -273,19 +273,34 @@ describe.skipIf(noDatabase)("public product listing", () => {
 
   describe("sorting", () => {
     it("orders newest first by publication date", async () => {
+      // STRUGGLING is used by no other test in this file, so filtering on it
+      // scopes the assertion to these two rows.
+      //
+      // Without that scope this test is flaky, and was: the fixtures are
+      // published in January and June while every other suite publishes at
+      // `now`, so once the shared branch held more than a page of recent rows
+      // these two fell off page one and both indexOf calls returned -1. A test
+      // whose result depends on how much unrelated data happens to exist is not
+      // testing the sort.
       const older = await make("Sorted Older", {
         publishedAt: new Date("2026-01-01T00:00:00.000Z"),
+        failureStatus: "STRUGGLING",
       });
       const newer = await make("Sorted Newer", {
         publishedAt: new Date("2026-06-01T00:00:00.000Z"),
+        failureStatus: "STRUGGLING",
       });
 
-      const { slugs } = await visibleSlugs({
+      const page = await listPublicDirectory({
         repository: repository!,
         sort: "newest",
+        failureStatus: "STRUGGLING",
         pageSize: 48,
       });
+      const slugs = page.items.map((item) => item.slug);
 
+      expect(slugs).toContain(newer.slug);
+      expect(slugs).toContain(older.slug);
       expect(slugs.indexOf(newer.slug)).toBeLessThan(slugs.indexOf(older.slug));
     });
 
