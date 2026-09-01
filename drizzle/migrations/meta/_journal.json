@@ -29,6 +29,13 @@
       "when": 1788175841857,
       "tag": "0003_curved_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788249407015,
+      "tag": "0004_harsh_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

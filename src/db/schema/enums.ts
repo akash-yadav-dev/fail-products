@@ -39,3 +39,26 @@ export const failureStatusEnum = pgEnum(
     ...string[],
   ]
 );
+
+/**
+ * Which of the three axes a history row records.
+ *
+ * ADR-013 requires `product_status_history` to cover all three. They are one
+ * table rather than three because the timeline a moderator or an owner reads is
+ * chronological across every axis — "published, then flagged, then marked
+ * recovering" is one story, and three tables would make it a three-way merge.
+ */
+export const statusAxisEnum = pgEnum("status_axis", [
+  "PUBLICATION",
+  "MODERATION",
+  "FAILURE",
+]);
+
+/**
+ * The capacity the actor was acting in, recorded rather than inferred.
+ *
+ * A user's role can change after the fact. Storing what they were when they
+ * acted keeps the audit trail true; deriving it at read time rewrites history
+ * every time someone is promoted or demoted.
+ */
+export const actorRoleEnum = pgEnum("actor_role", ["OWNER", "MODERATOR", "SYSTEM"]);
