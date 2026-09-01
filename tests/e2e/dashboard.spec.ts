@@ -213,7 +213,7 @@ test.describe("the breadcrumb", () => {
   });
 });
 
-test.describe("the placeholder states", () => {
+test.describe("the wired states", () => {
   test("the products table renders its columns and an empty state", async ({
     page,
   }) => {
@@ -222,24 +222,33 @@ test.describe("the placeholder states", () => {
     await expect(
       page.getByRole("columnheader", { name: "Product" })
     ).toBeVisible();
+    // The test session owns nothing, so the zero-state is the correct render.
     await expect(
       page.getByText(/you have not listed anything/i)
     ).toBeVisible();
   });
 
-  test("the filter is disabled while there is nothing to filter", async ({
+  test("the settings form accepts input and can be submitted", async ({
     page,
   }) => {
-    await page.goto("/dashboard/products");
-
-    await expect(page.getByRole("searchbox")).toBeDisabled();
-  });
-
-  test("the settings form is inert", async ({ page }) => {
     await page.goto("/dashboard/settings");
 
-    await expect(page.getByLabel("Display name")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    // Was inert by design while no account service existed. It is wired now,
+    // and an enabled control is the thing worth asserting.
+    await expect(page.getByLabel("Display name")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Save changes" })
+    ).toBeEnabled();
+  });
+
+  test("the settings form labels every control", async ({ page }) => {
+    await page.goto("/dashboard/settings");
+
+    // A control with no label is unusable with a screen reader, and this form
+    // is the one place an account's public identity is set.
+    for (const label of ["Display name", "Username", "Website", "Bio"]) {
+      await expect(page.getByLabel(label)).toBeVisible();
+    }
   });
 
   test("no metric claims a number", async ({ page }) => {

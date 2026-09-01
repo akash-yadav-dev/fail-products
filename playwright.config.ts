@@ -1,6 +1,8 @@
 // playwright.config.ts
 import { defineConfig, devices } from "@playwright/test";
 
+import { applyLocalEnv } from "./scripts/load-env.mjs";
+
 /**
  * E2E runs against a real production build, never `next dev` — the dev server
  * differs in caching, error output, and bundling, and those are exactly the
@@ -16,6 +18,13 @@ import { defineConfig, devices } from "@playwright/test";
  * port would otherwise be reused as if it were the build under test, and the
  * suite would silently assert against whatever that process happened to serve.
  */
+/**
+ * The build under test needs the same environment the application does.
+ * Without DATABASE_URL the pages that read data cannot render, so the specs
+ * that exercise them skip themselves rather than assert against a 500.
+ */
+applyLocalEnv();
+
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
@@ -51,7 +60,16 @@ export default defineConfig({
         url: baseURL,
         // The only environment where src/app/fault/page.tsx exists. It is what
         // gives tests/e2e/error-boundary.spec.ts an error to assert against.
-        env: { E2E_FAULT_ROUTES: "1", E2E_AUTH_BYPASS: "1", NEXT_PUBLIC_SITE_URL: "http://localhost:3100" },
+        env: {
+          E2E_FAULT_ROUTES: "1",
+          E2E_AUTH_BYPASS: "1",
+          NEXT_PUBLIC_SITE_URL: "http://localhost:3100",
+          // Passed through when present. Absent in CI, which is why the
+          // data-dependent specs are skipped there rather than failing.
+          ...(process.env.DATABASE_URL
+            ? { DATABASE_URL: process.env.DATABASE_URL }
+            : {}),
+        },
         // A production build is slow on a cold cache; CI is slower still.
         timeout: 300_000,
         // Never inherit a process this config did not start.
