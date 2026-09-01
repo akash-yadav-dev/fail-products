@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD CONSTRAINT "products_published_at_required" CHECK ("products"."publication_state" <> 'PUBLISHED' OR "products"."published_at" IS NOT NULL);

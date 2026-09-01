@@ -1,6 +1,7 @@
 // src/db/schema/products.ts
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   pgTable,
   primaryKey,
@@ -86,6 +87,18 @@ export const products = pgTable(
       table.publishedAt
     ),
     index("products_failure_status_idx").on(table.failureStatus),
+    // A published listing always knows when it went public.
+    //
+    // The public list is keyset-paginated on `published_at` (slice 2.1), and a
+    // NULL sorts outside that ordering — the row would appear on page 1 and
+    // then be unreachable from the cursor, which reads as a product silently
+    // disappearing rather than as the data defect it is. `changePublicationState`
+    // already stamps the column on the first publish; this makes that an
+    // invariant the database holds rather than one the service remembers.
+    check(
+      "products_published_at_required",
+      sql`${table.publicationState} <> 'PUBLISHED' OR ${table.publishedAt} IS NOT NULL`
+    ),
   ]
 );
 

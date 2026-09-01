@@ -1,21 +1,16 @@
 // src/app/products/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PackageOpen, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { ProductList } from "@/components/products/product-list";
 import { StatusBadge } from "@/components/products/status-badge";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
 import { FAILURE_STATUSES } from "@/domain/product/failure-status";
+import { listPublicDirectory } from "@/services/product/server-product";
 
 export const metadata: Metadata = {
   title: "Products",
@@ -23,12 +18,24 @@ export const metadata: Metadata = {
     "Browse products that failed, stalled, or never found traction, and read what their founders learned.",
 };
 
-export default function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: PageProps<"/products">) {
+  const params = await searchParams;
+
+  // Every parameter is untrusted: this page is public and unauthenticated. The
+  // service parses each one against the domain allowlists rather than passing
+  // a query string through to a query.
+  const page = await listPublicDirectory({
+    sort: params.sort,
+    cursor: params.cursor,
+  });
+
   return (
     <>
       <PageHeader
         title="Products"
-        description="Every listed product, newest first. Each one is published by the person who built it."
+        description="Every listed product. Each one is published by the person who built it."
         breadcrumbs={[{ label: "Home", href: "/" }, { label: "Products" }]}
         actions={
           <Button asChild size="lg" className="h-11">
@@ -70,21 +77,14 @@ export default function ProductsPage() {
           </ul>
         </div>
 
-        <Empty className="border py-16">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <PackageOpen />
-            </EmptyMedia>
-            <EmptyTitle>No products listed yet</EmptyTitle>
-            <EmptyDescription>
-              The directory is empty because submissions are not open. Someone
-              has to fail first, and it may as well be on purpose.
-            </EmptyDescription>
-          </EmptyHeader>
-          <Button asChild variant="outline" className="h-10">
-            <Link href="/submit">Be the first listing</Link>
-          </Button>
-        </Empty>
+        <ProductList
+          items={page.items}
+          sort={page.sort}
+          nextCursor={page.nextCursor}
+          basePath="/products"
+          emptyTitle="No products listed yet"
+          emptyDescription="The directory is empty because nobody has published a listing. Someone has to fail first, and it may as well be on purpose."
+        />
       </Container>
     </>
   );

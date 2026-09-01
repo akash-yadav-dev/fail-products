@@ -1,5 +1,12 @@
 // src/services/product/product-service.ts
 import type { FailureStatus } from "@/domain/product/failure-status";
+import {
+  decodeProductCursor,
+  encodeProductCursor,
+  parsePageSize,
+  parseProductSort,
+  type ProductSort,
+} from "@/domain/product/listing";
 import { authorize, type Viewer } from "@/domain/product/permissions";
 import { slugCandidates } from "@/domain/product/slug";
 import {
@@ -324,3 +331,65 @@ export async function resolvePublicProduct(
 
   return { kind: "missing" };
 }
+
+/**
+ * One page of the public directory, and the cursor for the next one.
+ *
+ * Every public list goes through here: `/products`, `/status/[slug]`,
+ * `/categories/[slug]`, and search differ only in the filters they pass. The
+ * parameters arrive as `unknown` because they come from a query string, and
+ * each is parsed by the domain module rather than trusted — an unvalidated
+ * sort chooses a column and an unvalidated limit chooses how much of the table
+ * an anonymous request may read.
+ */
+export async function listPublicDirectory(input: {
+  repository: ProductRepository;
+  sort?: unknown;
+  cursor?: unknown;
+  pageSize?: unknown;
+  failureStatus?: FailureStatus;
+  categoryId?: string;
+}) {
+  const sort = parseProductSort(input.sort);
+  const cursor = decodeProductCursor(input.cursor);
+  const limit = parsePageSize(input.pageSize);
+
+  // One more row than the page shows. That extra row is the whole answer to "is
+  // there another page?", so the alternative — a second COUNT over the same
+  // predicate — is a query billed for information this one already has.
+  const rows = await input.repository.listPublic({
+    limit: limit + 1,
+    sort,
+    cursor,
+    filters: {
+      failureStatus: input.failureStatus,
+      categoryId: input.categoryId,
+    },
+  });
+
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const last = items.at(-1);
+
+  // The position to resume from is the sort column of the last row shown.
+  const sortedAt =
+    sort === "recently-updated" ? last?.updatedAt : last?.publishedAt;
+
+  return {
+    items,
+    sort,
+    // `publishedAt` is non-null on every publicly visible row — migration 0005
+    // makes that a CHECK constraint rather than a convention — so this guard is
+    // the type system's price for the column being nullable in general, not a
+    // silent truncation of the list.
+    nextCursor:
+      hasMore && last && sortedAt
+        ? encodeProductCursor({ sortedAt, id: last.id })
+        : null,
+  };
+}
+
+export type PublicDirectoryPage = Awaited<
+  ReturnType<typeof listPublicDirectory>
+>;
+export type { ProductSort };
