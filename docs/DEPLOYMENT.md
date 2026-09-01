@@ -23,6 +23,16 @@ Use three logical environments:
 
 Do not create extra infrastructure environments until needed.
 
+### Environment variables
+
+`.env.example` lists names only. Local and preview values are supplied through the
+environment, and production secrets are stored with the provider. The application
+uses `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL`, `AUTH_SECRET`, GitHub OAuth credentials,
+ZeptoMail credentials, R2 credentials, and Turnstile credentials. `E2E_FAULT_ROUTES` and
+`E2E_AUTH_BYPASS` are deliberately not deployment variables; they are injected only by the local
+Playwright server to exercise error and authenticated dashboard flows. Never set either in preview
+or production.
+
 ### Local
 
 - local `.env.local`;
@@ -154,6 +164,11 @@ Use it on:
 Authenticated product creation may rely on rate limits without Turnstile initially.
 
 ## 8. Build/deploy checks
+
+The repository currently has no production deployment workflow. CI verifies the application and
+does not deploy Workers. GitHub's dependency-review action is enabled only when the repository
+Dependency graph is enabled and the `DEPENDENCY_REVIEW_ENABLED` repository variable is set to
+`true`; until then CI reports an explicit skip and runs `pnpm audit` for production dependencies.
 
 Every production deploy should pass:
 

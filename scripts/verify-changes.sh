@@ -283,8 +283,12 @@ fi
 head2 "SAFETY CHECKS"
 
 # --- Branch protection -----------------------------------------------------
-if [ "$BRANCH" = "main" ]; then
+if [ "$BRANCH" = "main" ] && [ "$CI_MODE" -eq 0 ]; then
   fail "on branch 'main' — main is protected; branch first (CLAUDE.md §2)"
+elif [ "$BRANCH" = "main" ]; then
+  # CI runs after a protected merge has landed. The repository setting, not
+  # this post-push observer, prevents direct pushes to main.
+  note "  branch                 main observed in CI (server-side protection applies)"
 else
   note "  branch                 ok ($BRANCH)"
 fi
@@ -326,7 +330,7 @@ LEAKED="$(printf '%s\n' "$ADDED" \
           | grep -oiE '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}' \
           | tr 'A-Z' 'a-z' \
           | grep -vF "$ALLOWED_EMAIL" \
-          | grep -vE '@(example\.(com|org|net)|failproducts\.com|users\.noreply\.github\.com|sentry\.io|schema\.org)$' \
+          | grep -vE '@(example\.(com|org|net|test)|failproducts\.(com|test)|users\.noreply\.github\.com|sentry\.io|schema\.org)$' \
           | sort -u || true)"
 if [ -n "$LEAKED" ]; then
   fail "non-allowlisted email address in added lines: $(printf '%s' "$LEAKED" | tr '\n' ' ')"

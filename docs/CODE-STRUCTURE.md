@@ -56,16 +56,20 @@ failproducts/
 │
 ├── src/
 │   ├── app/
-│   │   ├── (marketing)/
-│   │   ├── (dashboard)/
-│   │   ├── products/
-│   │   ├── categories/
-│   │   ├── status/
-│   │   ├── u/
-│   │   ├── auth/
+│   │   ├── (site)/              # public surface: shares the header and footer
+│   │   │   ├── (marketing)/
+│   │   │   ├── products/
+│   │   │   ├── categories/
+│   │   │   ├── status/
+│   │   │   ├── u/
+│   │   │   ├── auth/
+│   │   │   └── layout.tsx
+│   │   ├── (dashboard)/         # creator surface: its own sidebar shell
 │   │   ├── api/
-│   │   ├── layout.tsx
+│   │   ├── layout.tsx           # providers only, no page furniture
 │   │   ├── not-found.tsx
+│   │   ├── error.tsx
+│   │   ├── global-error.tsx
 │   │   └── globals.css
 │   │
 │   ├── components/
@@ -164,6 +168,24 @@ failproducts/
 
 Tailwind v4 is configured from `src/app/globals.css` with `@theme`, so there is no
 `tailwind.config.*` file.
+
+## Route groups
+
+`(site)` and `(dashboard)` are route groups, so neither appears in a URL —
+`src/app/(site)/products/page.tsx` is still `/products`. They exist to split the two
+surfaces by the chrome they carry:
+
+| Group | Layout | Chrome |
+|---|---|---|
+| `(site)` | `app/(site)/layout.tsx` | `SiteHeader`, `<main>`, `SiteFooter` |
+| `(dashboard)` | `app/(dashboard)/dashboard/layout.tsx` | sidebar shell, dashboard header |
+
+The root layout carries **providers only** — theme, tooltip, toaster — and no header or
+footer. Putting the marketing chrome there would force it onto the dashboard, which is a
+different application surface with its own navigation.
+
+`not-found.tsx`, `error.tsx`, and `global-error.tsx` sit at the root because they must
+catch every segment, and so they render whatever chrome they need themselves.
 
 ## Ownership rule
 

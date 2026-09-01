@@ -17,3 +17,9 @@ dist/
 
 # Local MCP configuration — copy from mcp/examples/, never commit
 .mcp.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/

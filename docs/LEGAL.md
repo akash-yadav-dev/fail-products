@@ -109,6 +109,7 @@ Any migration that introduces a new personal-data column must add a row here in 
 | Email address | erased | until deletion | identifier; no ongoing purpose after deletion |
 | Name, username, avatar, bio, links | erased; author displayed as "deleted user" | until deletion | personal data |
 | Auth tokens, OTPs, sessions | erased immediately | minutes to hours | single-use secrets |
+| Auth rate-limit counters (hashed email/IP) | erased after the active window | 15 minutes | abuse prevention without retaining raw identifiers |
 | Products owned | owner-choice: delete, or transfer to anonymous authorship | until deletion | the founder's own disclosure |
 | Product content (descriptions, story) | removed with the product if deleted | indefinite while published | the published record |
 | Comments | anonymised, text retained | indefinite | removing them destroys the thread context others rely on |
