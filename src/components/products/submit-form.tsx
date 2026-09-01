@@ -1,0 +1,114 @@
+"use client";
+
+import { useActionState } from "react";
+
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { FAILURE_STATUSES } from "@/domain/product/failure-status";
+import type { FormActionState } from "@/lib/forms/action-state";
+
+type SubmitAction = (
+  state: FormActionState | null,
+  formData: FormData
+) => Promise<FormActionState>;
+
+/**
+ * The listing form.
+ *
+ * Creates a **draft**. Nothing here publishes: a listing goes public from the
+ * dashboard, deliberately as a second, separate decision.
+ */
+export function SubmitForm({ action }: { action: SubmitAction }) {
+  const [state, formAction, pending] = useActionState(action, null);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="name">Product name</Label>
+        <Input
+          id="name"
+          name="name"
+          required
+          maxLength={120}
+          className="h-11"
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="tagline">Tagline</Label>
+        <Input
+          id="tagline"
+          name="tagline"
+          maxLength={200}
+          className="h-11"
+          placeholder="One line on what it did."
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="websiteUrl">Website</Label>
+        <Input
+          id="websiteUrl"
+          name="websiteUrl"
+          type="url"
+          inputMode="url"
+          placeholder="https://example.com"
+          className="h-11"
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="failureStatus">Status</Label>
+        <Select name="failureStatus" defaultValue="ABANDONED">
+          <SelectTrigger id="failureStatus" className="h-11">
+            <SelectValue placeholder="What is it doing now?" />
+          </SelectTrigger>
+          <SelectContent>
+            {FAILURE_STATUSES.map((status) => (
+              <SelectItem key={status.value} value={status.value}>
+                {status.label} — {status.description}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="description">What happened</Label>
+        <Textarea
+          id="description"
+          name="description"
+          rows={8}
+          placeholder="What you set out to build, what went wrong, and what you would do differently."
+        />
+      </div>
+
+      {state && state.message ? (
+        <Alert variant={state.ok ? "default" : "destructive"} role="status" aria-live="polite">
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div>
+        <Button type="submit" size="lg" className="h-11" disabled={pending}>
+          {pending ? "Saving…" : "Save as draft"}
+        </Button>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Saved as a draft. Nothing is public until you publish it from your
+          dashboard.
+        </p>
+      </div>
+    </form>
+  );
+}

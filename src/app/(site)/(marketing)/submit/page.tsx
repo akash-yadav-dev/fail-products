@@ -7,6 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
+import { SubmitForm } from "@/components/products/submit-form";
+import { currentUserOrNull } from "@/services/auth/current-user";
+import { submitProductAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Submit a product",
@@ -21,7 +24,9 @@ const REQUIREMENTS = [
   "You accept that the listing is public and open to community discussion.",
 ] as const;
 
-export default function SubmitPage() {
+export default async function SubmitPage() {
+  const user = await currentUserOrNull();
+
   return (
     <>
       <PageHeader
@@ -50,22 +55,28 @@ export default function SubmitPage() {
           </ul>
         </section>
 
-        <Alert>
-          <AlertTitle>Submissions are not open yet</AlertTitle>
-          <AlertDescription>
-            Accounts and the submission form are not built. This page describes
-            the rules the form will enforce once it exists.
-          </AlertDescription>
-        </Alert>
+        {user ? (
+          <SubmitForm action={submitProductAction} />
+        ) : (
+          <>
+            <Alert>
+              <AlertTitle>Sign in to list a product</AlertTitle>
+              <AlertDescription>
+                Listings are owner-only, so the form needs to know who you are
+                before it can attach a product to you.
+              </AlertDescription>
+            </Alert>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild size="lg" className="h-11">
-            <Link href="/auth/sign-in">Sign in to continue</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="h-11">
-            <Link href="/guidelines">Read the guidelines</Link>
-          </Button>
-        </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button asChild size="lg" className="h-11">
+                <Link href="/auth/sign-in">Sign in to continue</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-11">
+                <Link href="/guidelines">Read the guidelines</Link>
+              </Button>
+            </div>
+          </>
+        )}
       </Container>
     </>
   );
