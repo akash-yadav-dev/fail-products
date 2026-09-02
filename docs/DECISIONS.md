@@ -770,7 +770,7 @@ the hundredth.
 
 ## ADR-026 — Categories are a fixed, curated taxonomy; tags carry the open vocabulary
 
-**Status:** Accepted
+**Status:** Accepted — amended 2026-09-02 (slug freeze and filing rule; see below)
 **Date:** 2026-09-01
 
 Resolves open question 5, which blocked Phase 2 slice 2.3.
@@ -845,6 +845,39 @@ reasons nothing in the code explains.
 
 Category slugs join usernames, product slugs, and tag slugs in the reserved-name namespace
 (ADR-019). A unit test asserts no curated slug is reserved.
+
+### Amendment — 2026-09-02
+
+Two gaps this decision left open, closed without changing what it decided. Neither needs a
+migration and neither touches a product already filed.
+
+**Category slugs are frozen once published; only `name` and `description` may change.**
+ADR-019 gave products a `product_slug_history` table precisely because a rename discards every
+inbound link invisibly. Categories have no such table, so renaming `developer-tools` would 404
+every link to `/categories/developer-tools` — including the ones this project exists to
+accumulate. The consequence above already anticipates the list evolving ("if Other grows past a
+useful share of the directory, that is the measurement that justifies splitting it"), and a
+split means new slugs; freezing the published ones is what makes that safe. A new category is a
+new slug and a new page, which is additive. A renamed one is a broken page.
+
+A doc line alone would be a convention, so `tests/unit/domain/product/category.test.ts` pins
+the published slug set: changing or removing one fails with the reason, adding one does not.
+
+**Filing is decided by what the product was for, not how it was sold.** The list mixes three
+axes — business models (SaaS, Marketplace), domains (AI, Fintech, Health, Games, Education,
+Hardware, E-commerce), and audiences (Developer tools, Productivity, Social) — and a product
+picks at most one. An AI SaaS sold to developers has three defensible homes, so without a
+tie-break `/categories/ai` shows an arbitrary slice of the products that belong on it, and the
+founder filing it cannot be wrong in any way another person could correct.
+
+The rule: **pick the domain the product served; use SaaS or Marketplace only when no domain
+category fits.** It is stated in `docs/PRODUCT.md` §10 and shown in the submit form, which now
+also renders each category's description rather than its bare name — those descriptions already
+existed in the domain module and were never displayed.
+
+This is a labelling convention, not a constraint. It is deliberately not validated: no
+server-side signal distinguishes an honest judgement call from a wrong one, and rejecting a
+submission over a taxonomy opinion costs more than the misfiling does.
 
 ## ADR-027 — Category and status pages take no query parameters
 
