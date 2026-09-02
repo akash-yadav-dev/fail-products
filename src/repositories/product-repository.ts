@@ -120,7 +120,15 @@ export class ProductRepository {
   /** A product for a public page. Returns null for anything not publicly visible. */
   async findPublicBySlug(slug: string) {
     const [row] = await this.db
-      .select({ ...publicColumns, ownerUsername: users.username })
+      .select({
+        ...publicColumns,
+        // Not rendered. It is compared against a comment's author id so the
+        // founder indicator can be derived rather than stored — a stored flag
+        // would be a snapshot of who owned the listing when the comment was
+        // written, and would keep saying "founder" after it changed hands.
+        ownerId: products.ownerId,
+        ownerUsername: users.username,
+      })
       .from(products)
       .leftJoin(users, eq(products.ownerId, users.id))
       .where(and(eq(products.slug, slug), publiclyVisibleProduct))

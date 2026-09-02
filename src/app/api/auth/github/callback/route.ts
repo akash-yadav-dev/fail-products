@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { constantTimeEqual } from "@/lib/auth/crypto";
+import {
+  ACCOUNT_HINT_COOKIE,
+  accountHintCookieOptions,
+} from "@/lib/auth/account-hint";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/auth/session-cookie";
 import { authConfig, oauthCookieOptions } from "@/lib/config/auth";
 import { signInWithGithub } from "@/services/auth/server-auth";
@@ -40,6 +44,8 @@ export async function GET(request: Request) {
     if (!result) return failureResponse();
     const response = NextResponse.redirect(new URL("/dashboard", config.siteUrl));
     response.cookies.set(SESSION_COOKIE, result.sessionToken, SESSION_COOKIE_OPTIONS);
+    // Paired with the session everywhere one is created. See account-hint.ts.
+    response.cookies.set(ACCOUNT_HINT_COOKIE, "1", accountHintCookieOptions());
     response.cookies.set(STATE_COOKIE, "", { ...oauthCookieOptions(), maxAge: 0 });
     response.cookies.set(VERIFIER_COOKIE, "", { ...oauthCookieOptions(), maxAge: 0 });
     return response;
