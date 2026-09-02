@@ -93,14 +93,26 @@ export function SubmitForm({ action }: { action: SubmitAction }) {
           forbids. The value is still validated server-side — a <select> is a
           suggestion, and this is an ordinary form post.
         */}
+        <p className="text-muted-foreground text-sm">
+          Pick what the product was <em>for</em>, not how it was sold. Choose
+          SaaS or Marketplace only when no other category fits.
+        </p>
         <Select name="categorySlug" defaultValue="other">
           <SelectTrigger id="categorySlug" className="h-11">
             <SelectValue placeholder="What kind of product was it?" />
           </SelectTrigger>
           <SelectContent>
+            {/*
+              The description, not the bare name. The list mixes domains,
+              audiences, and business models (ADR-026 amendment), so "SaaS" and
+              "AI" both fit an AI SaaS and the name alone cannot say which one
+              this form wants. The descriptions already existed in the domain
+              module and were not being shown. Same shape as the status select
+              above, deliberately.
+            */}
             {PRODUCT_CATEGORIES.map((category) => (
               <SelectItem key={category.slug} value={category.slug}>
-                {category.name}
+                {category.name} — {category.description}
               </SelectItem>
             ))}
           </SelectContent>

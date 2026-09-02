@@ -19,6 +19,25 @@
  * rather than a second set of duplicates under different keys. They are
  * genuine UUIDv7 values (ADR-021).
  *
+ * **Slugs are frozen once published.** A slug is a URL, and a category has no
+ * redirect history — products got `product_slug_history` in ADR-019 precisely
+ * because a rename discards every inbound link invisibly, and nothing here
+ * gives categories the same protection. Renaming `developer-tools` would 404
+ * every link to `/categories/developer-tools`. Adding a category is additive
+ * and fine; changing or removing an existing slug is not, and
+ * `tests/unit/domain/product/category.test.ts` fails if it happens.
+ *
+ * The `name` and `description` are display text and may change freely.
+ *
+ * **The list mixes three axes** — domains (AI, Fintech, Health, Education,
+ * Games, Hardware, E-commerce), audiences (Developer tools, Productivity,
+ * Social), and business models (SaaS, Marketplace) — and a product picks at
+ * most one, so more than one can fit. The tie-break, stated in the submit form
+ * and `docs/PRODUCT.md` §10: pick the domain the product served, and use SaaS
+ * or Marketplace only when no domain category fits. It is a convention rather
+ * than a constraint, because no server-side signal separates an honest
+ * judgement call from a wrong one.
+ *
  * Domain code imports nothing from Next.js, React, Drizzle, or any provider.
  */
 
