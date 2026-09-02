@@ -179,12 +179,27 @@ Minimum coverage:
 | sign-in verification (submit OTP / token) | DB counter — attempt cap, then lock the token |
 | OAuth callback | WAF + `ratelimit` binding |
 | product submission | `ratelimit` binding, per user |
-| comment posting | `ratelimit` binding, per user |
-| reports | `ratelimit` binding + Turnstile |
+| comment posting | DB counter, per user — see below |
+| reports | DB counter, per user + Turnstile — see below |
 | waitlist signup | `ratelimit` binding + Turnstile |
 | image upload initiation | `ratelimit` binding, per user |
 | search | WAF + `ratelimit` binding |
 | waitlist CSV export | DB counter — bulk PII, also audit-logged |
+
+**Comment posting and reporting use the DB counter, not the binding.** The Workers
+`ratelimit` binding is what those two endpoints should eventually use, and the table above named
+it first. Nothing is deployed to Workers yet, so there is no binding to call and the real choice
+is the counted layer or no limit at all. Counted is the stricter of the two, the request already
+writes a row, and moving a rule back to the edge layer is a one-line change to
+`RATE_LIMITS` in `src/services/security/rate-limit.ts`. Shipping the weaker option would have
+meant shipping none.
+
+Every counted limit shares one table, `rate_limits`, with the rule name inside the hashed key so
+two limits can never share a counter. That sharing has one hazard worth naming: a sweep of
+expired rows must use a horizon no rule can outlive, never the calling rule's own window — the
+naive version lets a short-window limit delete a long-window limit's live counter, which is a
+rate limit bypassable through a second, unrelated endpoint. `tests/integration/rate-limit.test.ts`
+pins it.
 
 Turnstile should be applied selectively to public/high-abuse endpoints. Its token must be
 **verified server-side** against the siteverify endpoint and treated as single-use; a token

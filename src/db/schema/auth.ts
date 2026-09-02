@@ -1,7 +1,6 @@
 import {
   integer,
   index,
-  pgEnum,
   pgTable,
   timestamp,
   uniqueIndex,
@@ -11,11 +10,6 @@ import {
 
 import { createdAt, primaryId, updatedAt } from "@/db/schema/columns";
 import { users } from "@/db/schema/users";
-
-export const authRateLimitScopeEnum = pgEnum("auth_rate_limit_scope", [
-  "EMAIL",
-  "IP",
-]);
 
 export const authTokens = pgTable(
   "auth_tokens",
@@ -50,25 +44,6 @@ export const sessions = pgTable(
   },
   (table) => [
     uniqueIndex("sessions_token_hash_key").on(table.tokenHash),
-  ]
-);
-
-export const authRateLimits = pgTable(
-  "auth_rate_limits",
-  {
-    id: primaryId(),
-    scope: authRateLimitScopeEnum("scope").notNull(),
-    keyHash: varchar("key_hash", { length: 64 }).notNull(),
-    windowStartedAt: timestamp("window_started_at", {
-      withTimezone: true,
-      mode: "date",
-    }).notNull(),
-    count: integer("count").notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (table) => [
-    uniqueIndex("auth_rate_limits_scope_key_hash_key").on(table.scope, table.keyHash),
   ]
 );
 

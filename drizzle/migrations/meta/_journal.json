@@ -57,6 +57,20 @@
       "when": 1788257733597,
       "tag": "0007_aspiring_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788324582997,
+      "tag": "0008_past_spirit",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788324592917,
+      "tag": "0009_perpetual_william_stryker",
+      "breakpoints": true
     }
   ]
 }
