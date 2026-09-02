@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import type { FormActionState } from "@/lib/forms/action-state";
 import { currentUser } from "@/services/auth/current-user";
@@ -9,6 +10,12 @@ import {
   MAX_COMMENT_LENGTH,
 } from "@/services/comment/comment-service";
 import { postComment } from "@/services/comment/server-comment";
+import { ModerationError } from "@/services/moderation/moderation-service";
+import { fileReport } from "@/services/moderation/server-moderation";
+import {
+  TURNSTILE_FIELD,
+  verifyTurnstile,
+} from "@/services/security/turnstile";
 
 /**
  * Posts a comment on a product.
@@ -25,6 +32,20 @@ export async function postCommentAction(
 ): Promise<FormActionState> {
   const user = await currentUser();
   const productId = String(formData.get("productId") ?? "");
+
+  // Before anything is written, and server-side. A token checked only in the
+  // browser is a widget an attacker posts around (docs/SECURITY.md §11).
+  const challenge = await verifyTurnstile(
+    formData.get(TURNSTILE_FIELD),
+    "comment",
+    await requestIpAddress()
+  );
+  if (!challenge.ok) {
+    return {
+      ok: false,
+      message: "That check did not complete. Reload the page and try again.",
+    };
+  }
 
   try {
     const posted = await postComment({
@@ -78,4 +99,83 @@ function relativeTime(resetAt: number | undefined): string {
 
   const minutes = Math.max(1, Math.ceil((resetAt - Date.now()) / 60_000));
   return `in about ${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+/**
+ * Files an abuse report against this product or one of its comments.
+ *
+ * The reporter comes from the session. The target arrives from the form and is
+ * re-loaded server-side, so a report cannot be filed against something the
+ * caller merely named.
+ */
+export async function reportAction(
+  _previous: FormActionState | null,
+  formData: FormData
+): Promise<FormActionState> {
+  const user = await currentUser();
+
+  const challenge = await verifyTurnstile(
+    formData.get(TURNSTILE_FIELD),
+    "report",
+    await requestIpAddress()
+  );
+  if (!challenge.ok) {
+    return {
+      ok: false,
+      message: "That check did not complete. Reload the page and try again.",
+    };
+  }
+
+  try {
+    await fileReport({
+      viewer: { userId: user?.id ?? null },
+      targetType: formData.get("targetType"),
+      targetId: String(formData.get("targetId") ?? ""),
+      reason: formData.get("reason"),
+      detail: formData.get("detail"),
+    });
+
+    // Deliberately the same answer whether this was the first report or a
+    // duplicate. "You already reported this" tells the reporter nothing they
+    // can act on, and the predictable response to being told is a second
+    // attempt from another account.
+    return {
+      ok: true,
+      message:
+        "Thanks — a moderator will look at this. Nothing is removed automatically.",
+    };
+  } catch (error) {
+    if (error instanceof ModerationError) {
+      return { ok: false, message: reportMessageFor(error) };
+    }
+    return { ok: false, message: "Could not send that report. Try again." };
+  }
+}
+
+function reportMessageFor(error: ModerationError): string {
+  switch (error.code) {
+    case "NOT_SIGNED_IN":
+      return "Sign in to report something.";
+    case "INVALID_REASON":
+      return "Choose one of the reasons listed.";
+    case "DETAIL_REQUIRED":
+      return "Say what is wrong — \"something else\" needs a sentence.";
+    case "RATE_LIMITED":
+      return `You have sent a lot of reports. Try again ${relativeTime(error.resetAt)}.`;
+    case "TARGET_NOT_FOUND":
+      return "That is no longer here.";
+    default:
+      return "Could not send that report. Try again.";
+  }
+}
+
+/**
+ * The visitor's address, as Cloudflare reports it.
+ *
+ * Passed to siteverify and never stored (docs/LEGAL.md §5). Undefined rather
+ * than a placeholder when the header is absent, so the adapter omits the field
+ * instead of sending a string Cloudflare has to reject.
+ */
+async function requestIpAddress(): Promise<string | undefined> {
+  return (await headers()).get("cf-connecting-ip") ?? undefined;
 }

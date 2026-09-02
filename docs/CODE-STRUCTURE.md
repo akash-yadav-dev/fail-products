@@ -112,9 +112,10 @@ failproducts/
 │   │   │   ├── users.ts
 │   │   │   ├── products.ts
 │   │   │   ├── comments.ts
+│   │   │   ├── moderation.ts       # reports, comment_status_history
+│   │   │   ├── security.ts         # rate_limits
 │   │   │   ├── waitlists.ts
-│   │   │   ├── referrals.ts
-│   │   │   └── moderation.ts
+│   │   │   └── referrals.ts
 │   │   ├── index.ts
 │   │   └── queries/
 │   │

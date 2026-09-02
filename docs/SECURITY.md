@@ -51,6 +51,13 @@ Every property below is required, and each has a specific failure mode:
 
 Every product mutation must verify ownership or moderator privilege on the server.
 
+The moderator role lives on `users.role` and is read **from the database on every action**,
+never from the session and never from a cookie. A role cached at sign-in leaves a demoted
+moderator holding access until their session expires. Hiding a link is not a control: every
+moderation route 404s without the role — 404 rather than 403, because a 403 confirms the route
+exists and that the account is close to having access — and every Server Action re-checks it,
+because an action is a public endpoint whether or not a page rendered a button for it.
+
 Never rely on:
 
 ```ts
@@ -204,6 +211,14 @@ pins it.
 Turnstile should be applied selectively to public/high-abuse endpoints. Its token must be
 **verified server-side** against the siteverify endpoint and treated as single-use; a token
 validated only in the browser is not a control at all.
+
+Turnstile is active on comment posting and reporting. It is enabled **only when both keys are
+configured**, and a deployment without them fails to start rather than serving the forms
+unprotected — a bot control that silently switches itself off is worse than none, because
+nothing reports it. A local build and CI run with it off, which is why the rejection path is
+covered by tests rather than by the presence of the widget. Each widget declares an action name
+that is re-checked at verification, so a token minted on the comment form cannot be replayed
+against the report form.
 
 The rate limiter sits behind an interface in `lib/security/` so the Cloudflare-specific parts
 stay replaceable, per the portability rule in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §13.

@@ -38,6 +38,11 @@ export type SeededSession = {
   token: string;
 };
 
+/** The role a seeded account holds. Granted here the way it is granted in
+ * production: by writing the column, because nothing in the application
+ * changes it. */
+export type SeededRole = "MEMBER" | "MODERATOR";
+
 function db() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
@@ -49,7 +54,9 @@ function unique(prefix: string) {
 }
 
 /** Creates an account and a live session for it. */
-export async function seedSignedInAccount(): Promise<SeededSession> {
+export async function seedSignedInAccount(
+  role: SeededRole = "MEMBER"
+): Promise<SeededSession> {
   const database = db();
   const handle = unique("e2euser");
 
@@ -60,6 +67,7 @@ export async function seedSignedInAccount(): Promise<SeededSession> {
       usernameLower: handle.toLowerCase(),
       email: `${handle}@example.test`,
       displayName: `Test ${handle}`,
+      role,
     })
     .returning();
 

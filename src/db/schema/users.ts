@@ -1,7 +1,29 @@
 // src/db/schema/users.ts
-import { index, pgTable, text, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { createdAt, primaryId, updatedAt } from "@/db/schema/columns";
+
+/**
+ * What an account may do beyond its own records.
+ *
+ * Two values, because there are two answers today: an ordinary member, and
+ * somebody who works the moderation queue. There is no ADMIN, because nothing
+ * in the application distinguishes one — promoting a moderator is a SQL
+ * statement run by the maintainer, and a role with no behaviour attached is a
+ * column that lies about what the system enforces.
+ *
+ * `docs/PRODUCT.md` §10 lists "moderation role" as part of the User model.
+ * It is checked server-side against the session on every moderation action,
+ * never inferred from the UI (`docs/SECURITY.md` §3).
+ */
+export const userRoleEnum = pgEnum("user_role", ["MEMBER", "MODERATOR"]);
 
 /**
  * An account.
@@ -28,6 +50,14 @@ export const users = pgTable(
      * verified address, and an account without one is still an account.
      */
     email: varchar("email", { length: 320 }),
+
+    /**
+     * Defaults to MEMBER, and there is no path in the application that changes
+     * it. Moderator access is granted deliberately, out of band, by whoever
+     * owns the database — which at Stage 0 is the correct amount of machinery
+     * for a role held by one person.
+     */
+    role: userRoleEnum("role").notNull().default("MEMBER"),
 
     displayName: varchar("display_name", { length: 80 }),
     bio: text("bio"),
