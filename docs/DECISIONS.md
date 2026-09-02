@@ -845,3 +845,66 @@ reasons nothing in the code explains.
 
 Category slugs join usernames, product slugs, and tag slugs in the reserved-name namespace
 (ADR-019). A unit test asserts no curated slug is reserved.
+
+## ADR-027 — Category and status pages take no query parameters
+
+**Status:** Accepted
+**Date:** 2026-09-02
+
+Closes the one Phase 2 exit-gate item left unmet.
+
+### Decision
+
+`/categories/[slug]` and `/status/[slug]` read no query string. They render the first page
+of their filtered list, prerendered by `generateStaticParams` with `revalidate = 300`, and
+link onward to `/products?category=<slug>` or `/products?status=<slug>` for sorting and
+paging.
+
+`/products` gains `category` and `status` filters, validated against the same domain
+allowlists that back the two routes. Its canonical URL stays `/products`.
+
+### Reason
+
+`docs/DEPLOYMENT.md` §11 makes the cache hit ratio on `/products/[slug]` and
+`/categories/[slug]` a launch-blocking metric, because Neon's egress allowance is the budget
+that runs out first on a read-heavy public directory. `/products/[slug]` was made cacheable in
+Phase 2 and measured — `x-nextjs-cache: HIT`, `s-maxage=300`. `/categories/[slug]` was not,
+and the cause was specific: awaiting `searchParams` opts a route out of static rendering
+entirely, so every crawler hit on every category page was a Neon query.
+
+Three ways out were available.
+
+The parameters are also worth very little where they were. A category page is a landing
+surface for search traffic; a visitor who wants page two of Fintech, sorted by last edit, is
+doing the thing `/products` exists for. Splitting the two puts every query string on the one
+route that was always going to be dynamic — because of the search box — and leaves the
+crawlable surface static.
+
+`/status/[slug]` is fixed in the same change. `DEPLOYMENT.md` §11 does not name it, but it is
+the same shape and would have spent the egress the other two just saved.
+
+### Rejected alternatives
+
+- **`use cache` / `cacheComponents`** — caches the data rather than the page, and keeps the
+  parameters. It is a project-wide Next.js config flag that changes the rendering model of
+  every route, which is a complexity-gate item (`docs/AI-WORKFLOW.md` §8) for a benefit two
+  routes need. It also depends on an incremental cache handler that has never run on
+  Cloudflare Workers in this project, so it could not have been verified before deploy.
+- **`unstable_cache`** — same shape, no config flag, and the same unverifiable dependency on
+  a cache handler under OpenNext. Also explicitly unstable.
+- **A `<Suspense>` boundary around the list** — makes the shell static and leaves the query
+  dynamic, which is the half that costs egress. It would have looked like a fix in the route
+  table and changed nothing about the bill.
+
+### Consequences
+
+Sorting a category is a navigation to `/products` rather than a link in place. The sort
+control is not rendered on the two landing pages at all — rendering it hidden would put links
+to ignored query strings into the markup.
+
+A filtered `/products` URL is a duplicate of `/products` for indexing purposes, which the
+existing canonical already handles: `?category=` joins `?sort=`, `?cursor=`, and `?q=` as
+parameters that render a view, not a page.
+
+Any future public list must decide the same way: a crawlable surface takes no parameters, or
+it is not cacheable. That is the rule this ADR sets, not just the fix it applies.

@@ -1,7 +1,9 @@
 // src/app/categories/[slug]/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import { ProductList } from "@/components/products/product-list";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -9,6 +11,7 @@ import {
   PRODUCT_CATEGORIES,
   findCategoryBySlug,
 } from "@/domain/product/category";
+import { DEFAULT_PRODUCT_SORT } from "@/domain/product/listing";
 import { listPublicDirectory } from "@/services/product/server-product";
 
 /**
@@ -23,10 +26,22 @@ import { listPublicDirectory } from "@/services/product/server-product";
  * The category is resolved from the domain list rather than the table. The list
  * is the specification; the table is its copy, and an integration test holds
  * them together.
+ *
+ * **This page takes no query parameters** (ADR-027). It used to read `sort` and
+ * `cursor`, which made it dynamically rendered — and `docs/DEPLOYMENT.md` §11
+ * names the cache hit ratio here launch-blocking, because an uncached list
+ * queries Neon on every crawler hit and egress is the allowance that runs out
+ * first. Sorting and paging live on `/products`, which is dynamic anyway
+ * because of the search box.
  */
 export function generateStaticParams() {
   return PRODUCT_CATEGORIES.map((category) => ({ slug: category.slug }));
 }
+
+/** Five minutes, matching `/products/[slug]`: short enough to need no explicit
+ * invalidation when a listing is published, long enough to take the repeated
+ * crawler hit off the database. */
+export const revalidate = 300;
 
 export async function generateMetadata({
   params,
@@ -47,7 +62,6 @@ export async function generateMetadata({
 
 export default async function CategoryPage({
   params,
-  searchParams,
 }: PageProps<"/categories/[slug]">) {
   const { slug } = await params;
   const category = findCategoryBySlug(slug);
@@ -55,12 +69,7 @@ export default async function CategoryPage({
   // The page used to resolve for any value at all. It does not any more.
   if (!category) notFound();
 
-  const query = await searchParams;
-  const page = await listPublicDirectory({
-    categoryId: category.id,
-    sort: query.sort,
-    cursor: query.cursor,
-  });
+  const page = await listPublicDirectory({ categoryId: category.id });
 
   return (
     <>
@@ -74,15 +83,31 @@ export default async function CategoryPage({
         ]}
       />
 
-      <Container className="py-10 sm:py-14">
+      <Container className="flex flex-col gap-8 py-10 sm:py-14">
         <ProductList
           items={page.items}
-          sort={page.sort}
-          nextCursor={page.nextCursor}
+          sort={DEFAULT_PRODUCT_SORT}
+          nextCursor={null}
+          showSort={false}
           basePath={`/categories/${category.slug}`}
           emptyTitle={`Nothing listed under ${category.name} yet`}
           emptyDescription="No published listing carries this category. If you built one that did not work out, it belongs here."
         />
+
+        {/*
+          Where the parameters went. The deeper browse — sort, page two, a
+          search inside the category — is one navigation away, on the route
+          that carries query strings.
+        */}
+        {page.items.length > 0 ? (
+          <div className="flex justify-center">
+            <Button asChild variant="outline" className="h-11">
+              <Link href={`/products?category=${category.slug}`}>
+                Browse and sort every {category.name} listing
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </Container>
     </>
   );
