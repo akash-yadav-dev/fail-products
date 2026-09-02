@@ -616,6 +616,49 @@ describe.skipIf(noDatabase)("reporting and moderation", () => {
     ).rejects.toMatchObject({ code: "ALREADY_RESOLVED" });
   });
 
+  it("anonymises a reporter on account deletion without losing the report", async () => {
+    // docs/LEGAL.md §5: the reporter is anonymised and the report is retained
+    // for twelve months, because its value to abuse-pattern detection does not
+    // depend on who filed it.
+    //
+    // The case worth pinning is the index, not the column. Two deleted
+    // reporters on one product leave two rows reading (NULL, product) under a
+    // unique index — which Postgres permits, because it treats NULLs as
+    // distinct, and which would be a constraint violation on deletion if the
+    // index had been written any other way.
+    const listing = await product();
+    const dependencies = deps();
+    const first = await account();
+    const second = await account();
+
+    await fileReport({
+      ...dependencies,
+      viewer: { userId: first },
+      targetType: "PRODUCT",
+      targetId: listing.id,
+      reason: "SPAM",
+      detail: null,
+    });
+    await fileReport({
+      ...dependencies,
+      viewer: { userId: second },
+      targetType: "PRODUCT",
+      targetId: listing.id,
+      reason: "SPAM",
+      detail: null,
+    });
+
+    await db!.delete(users).where(inArray(users.id, [first, second]));
+
+    const rows = await db!
+      .select({ reporterId: reports.reporterId, reason: reports.reason })
+      .from(reports)
+      .where(eq(reports.productId, listing.id));
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.reporterId === null)).toBe(true);
+  });
+
   it("keeps reports about listings that are already hidden", async () => {
     // A queue filtered by public visibility would drop exactly the reports an
     // appeal is about.
