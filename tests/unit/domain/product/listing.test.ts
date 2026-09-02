@@ -62,10 +62,12 @@ describe("product sort allowlist", () => {
   });
 
   it("does not yet publish the sorts that have no data source", () => {
-    // docs/PRODUCT.md §5.1 lists four sorts. Comments are Phase 3 and referral
-    // events are Phase 4, so ordering by either one today would order by a
-    // number the system cannot compute. This test is the reminder to add them
-    // in the phase that creates the column, not before.
+    // docs/PRODUCT.md §5.1 lists four sorts. Phase 3 built the comments table,
+    // so "most discussed" is now computable — and still absent, because this
+    // list is keyset-paginated and a keyset needs a stored, ordered column
+    // that an aggregate is not. Referral events are Phase 4 and do not exist
+    // at all. This test is the reminder to add each one with the column that
+    // makes it pageable, not with the table that makes it countable.
     const values = PRODUCT_SORTS.map((sort) => sort.value);
     expect(values).not.toContain("most-discussed");
     expect(values).not.toContain("most-referred");
