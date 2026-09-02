@@ -390,6 +390,10 @@ Every public product page should have:
 
 Identity, authentication, public profile, moderation role.
 
+`role` is `MEMBER` or `MODERATOR`. There is no path in the application that changes it —
+granting moderator access is a deliberate out-of-band act by whoever owns the database, which
+at Stage 0 is the right amount of machinery for a role held by one person.
+
 ### Product
 
 Core product information, ownership, state, content, links.
@@ -429,11 +433,30 @@ Flexible discovery labels. This is the free-form axis; Category is not.
 
 ### Comment
 
-Community discussion attached to a product.
+Community discussion attached to a product. **Flat**, signed-in only, and **plain text** —
+`ENGINEERING.md` §8 allows Markdown or plain text and this takes the second, because the only
+Markdown feature a discussion needs is a link and `[label](url)` hands an attacker a caption of
+their choosing over a destination of their choosing. Bare URLs are autolinked and the visible
+text is always the real destination.
 
-### CommentReport
+Moderation states are `VISIBLE`, `PENDING`, `HIDDEN`, `REMOVED` — a different set from a
+product's, because there is no public "flagged" rendering for a comment. Only `VISIBLE` is
+public, stated as an allowlist so a state added later is invisible by default.
 
-Abuse/moderation reports.
+### CommentStatusHistory
+
+Every moderation change a comment has undergone, with the actor, the reason, and the report it
+answered. The counterpart of `ProductStatusHistory`; a product's moderation stays on that
+timeline instead (ADR-013), so there is one log per subject rather than two that can disagree.
+
+### Report
+
+Abuse reports against a product **or** a comment — one table, because they are read in one
+queue with one set of statuses and one duplicate rule. A report names exactly one target, and
+the database holds that: a CHECK requires the target type to match the column that is set.
+
+One account may file one report per target; a second is collapsed into the first rather than
+rejected, and the reporter is told the same thing either way.
 
 ### WaitlistEntry
 

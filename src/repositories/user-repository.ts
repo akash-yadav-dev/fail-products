@@ -59,6 +59,24 @@ export class UserRepository {
   }
 
   /**
+   * The account's role, read from the database on every request that needs it.
+   *
+   * Never cached in the session and never carried in a cookie: a demoted
+   * moderator has to lose access at the next action, not when their session
+   * happens to expire. It is one indexed primary-key lookup, on a path that is
+   * already about to write to the moderation tables.
+   */
+  async findRole(id: string) {
+    const [row] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+
+    return row?.role ?? null;
+  }
+
+  /**
    * Whether a handle is free.
    *
    * Advisory only. Two requests can both read "free" and both proceed, so the

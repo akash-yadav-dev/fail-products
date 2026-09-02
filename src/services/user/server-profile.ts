@@ -28,3 +28,15 @@ export function updateProfile(
 ) {
   return updateProfileUseCase({ ...input, repository: repository() });
 }
+
+/**
+ * Whether an account currently holds the moderator role.
+ *
+ * Read from the database on the request that needs it, never cached in the
+ * session. A demoted moderator loses access at their next action rather than
+ * at their next sign-in. It decides what the dashboard *shows*; the service
+ * layer re-checks it before it acts (`docs/SECURITY.md` §3).
+ */
+export async function isModerator(userId: string): Promise<boolean> {
+  return (await repository().findRole(userId)) === "MODERATOR";
+}

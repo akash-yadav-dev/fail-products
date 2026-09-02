@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommentComposer } from "@/components/comments/comment-composer";
 import { CommentList } from "@/components/comments/comment-list";
+import { ReportDialog } from "@/components/comments/report-dialog";
 import { ProductCard } from "@/components/products/product-card";
 import { StatusBadge } from "@/components/products/status-badge";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/domain/product/source-tier";
 import { OUTBOUND_CAMPAIGNS, buildOutboundProductUrl } from "@/lib/urls/outbound";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
+import { turnstileSiteKey } from "@/lib/config/turnstile";
 import { externalUrlHost } from "@/lib/validation/url";
 import { listComments } from "@/services/comment/server-comment";
 import {
@@ -31,7 +33,7 @@ import {
   listPublicDirectory,
   resolvePublicProduct,
 } from "@/services/product/server-product";
-import { postCommentAction } from "./actions";
+import { postCommentAction, reportAction } from "./actions";
 
 /**
  * A product listing.
@@ -158,6 +160,11 @@ export default async function ProductPage({
     listComments({ productId: product.id }),
   ]);
   const others = related.items.filter((item) => item.id !== product.id).slice(0, 3);
+
+  // Read once, server-side, and passed down. It is public by design but is not
+  // a NEXT_PUBLIC_ variable, so the bundle never embeds it and there is one
+  // place that decides whether the control is on.
+  const siteKey = turnstileSiteKey();
 
   return (
     <>
@@ -291,6 +298,8 @@ export default async function ProductPage({
               <CommentList
                 comments={discussion.items}
                 productOwnerId={product.ownerId}
+                reportAction={reportAction}
+                turnstileSiteKey={siteKey}
               />
 
               {discussion.hasMore ? (
@@ -306,6 +315,7 @@ export default async function ProductPage({
               <CommentComposer
                 productId={product.id}
                 action={postCommentAction}
+                turnstileSiteKey={siteKey}
               />
             </section>
 
@@ -378,7 +388,26 @@ export default async function ProductPage({
                   </time>
                 </div>
 
-                <p className="border-t border-border/60 pt-3 text-xs text-muted-foreground text-pretty">
+                <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3">
+                  <span className="text-xs text-muted-foreground">
+                    Something wrong here?
+                  </span>
+                  {/*
+                    docs/MODERATION.md §5 puts a report action on every public
+                    product as well as every comment. It is the founder's route
+                    too: §7 gives creators a way to report abusive content
+                    about their own listing.
+                  */}
+                  <ReportDialog
+                    targetType="PRODUCT"
+                    targetId={product.id}
+                    label={product.name}
+                    action={reportAction}
+                    turnstileSiteKey={siteKey}
+                  />
+                </div>
+
+                <p className="text-xs text-muted-foreground text-pretty">
                   {/*
                     docs/LEGAL.md §3: the acceptable phrasing is "the founder
                     listed this product as abandoned", never "this product

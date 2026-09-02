@@ -12,6 +12,7 @@ import {
   Plus,
   Scale,
   Settings,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,6 +41,8 @@ import {
 import { SiteLogo } from "@/components/layout/site-logo";
 import {
   dashboardNav,
+  moderationNav,
+  type DashboardNavGroup,
   type DashboardNavItem,
 } from "@/lib/config/dashboard";
 import { isActivePath } from "@/lib/urls/is-active-path";
@@ -51,6 +54,7 @@ const ICONS: Record<DashboardNavItem["icon"], LucideIcon> = {
   compass: Compass,
   plus: Plus,
   scale: Scale,
+  shield: Shield,
 };
 
 /**
@@ -64,9 +68,24 @@ function isCurrent(pathname: string, href: string): boolean {
     : isActivePath(pathname, href);
 }
 
-export function DashboardSidebar({ signOutAction }: { signOutAction: () => Promise<void> }) {
+export function DashboardSidebar({
+  signOutAction,
+  isModerator = false,
+}: {
+  signOutAction: () => Promise<void>;
+  /**
+   * Resolved server-side in the layout, from the database. It decides what is
+   * *shown*, never what is *allowed* — the route 404s and every action
+   * re-checks the role regardless of what this says.
+   */
+  isModerator?: boolean;
+}) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
+
+  const groups: readonly DashboardNavGroup[] = isModerator
+    ? [...dashboardNav, moderationNav]
+    : dashboardNav;
 
   /** On mobile the sidebar is a sheet over the content; navigating must close it. */
   const closeOnMobile = () => setOpenMobile(false);
@@ -102,7 +121,7 @@ export function DashboardSidebar({ signOutAction }: { signOutAction: () => Promi
       </SidebarHeader>
 
       <SidebarContent>
-        {dashboardNav.map((group) => (
+        {groups.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
