@@ -87,3 +87,104 @@ test.describe("status pages", () => {
     expect(response?.status()).toBe(404);
   });
 });
+
+/**
+ * ADR-027 — the two landing surfaces take no query string, which is what makes
+ * them cacheable at all. `docs/DEPLOYMENT.md` §11 calls the cache hit ratio on
+ * `/categories/[slug]` launch-blocking, and awaiting `searchParams` opts a
+ * route out of static rendering entirely.
+ *
+ * These assert the header rather than the ratio. A real ratio needs production
+ * traffic; what is verifiable here is that the route is cacheable at all, which
+ * is the half that was untrue before.
+ */
+test.describe("landing pages are cacheable", () => {
+  test.skip(noDatabase, "DATABASE_URL is not set — both pages are queries");
+
+  for (const path of ["/categories/ai", "/status/abandoned"]) {
+    test(`${path} is served from the cache, not the database`, async ({
+      request,
+    }) => {
+      await request.get(path);
+      const response = await request.get(path);
+
+      expect(response.headers()["cache-control"]).toContain("s-maxage");
+    });
+
+    test(`${path} ignores a sort parameter rather than rendering dynamically`, async ({
+      request,
+    }) => {
+      // The parameter is not merely unused: reading it would make the route
+      // dynamic. If this ever returns a no-store response, the cache is gone.
+      const response = await request.get(`${path}?sort=recently-updated`);
+
+      expect(response.headers()["cache-control"]).toContain("s-maxage");
+    });
+  }
+
+  test("sends deeper browsing to the route that carries parameters", async ({
+    page,
+  }) => {
+    await page.goto("/categories/ai");
+
+    // Only rendered when the category has listings; the link is what replaces
+    // the sort control the page used to carry.
+    const link = page.getByRole("link", {
+      name: /Browse and sort every AI listing/i,
+    });
+
+    if ((await link.count()) > 0) {
+      await expect(link).toHaveAttribute("href", "/products?category=ai");
+    }
+
+    // The sort control belongs to /products now, and must not be in the markup
+    // here even hidden — a hidden link is still a link a crawler follows.
+    await expect(page.getByRole("navigation", { name: "Sort products" })).toHaveCount(0);
+  });
+});
+
+test.describe("directory filters", () => {
+  test.skip(noDatabase, "DATABASE_URL is not set — the directory is a query");
+
+  test("narrows the directory by category", async ({ page }) => {
+    await page.goto("/products?category=saas");
+
+    const filters = page.getByRole("group", { name: "Active filters" });
+    await expect(filters).toBeVisible();
+    await expect(filters.getByRole("link", { name: "SaaS", exact: true })).toBeVisible();
+  });
+
+  test("narrows the directory by status", async ({ page }) => {
+    await page.goto("/products?status=abandoned");
+
+    // Scoped to the filter chip: the status badge row on the same page links to
+    // /status/abandoned too, and an unscoped locator would match either.
+    const filters = page.getByRole("group", { name: "Active filters" });
+    await expect(filters).toBeVisible();
+    await expect(filters.getByRole("link", { name: "Abandoned", exact: true })).toBeVisible();
+  });
+
+  test("offers a way out of a filter it applied", async ({ page }) => {
+    await page.goto("/products?category=saas");
+
+    await page
+      .getByRole("link", { name: "Remove the SaaS filter" })
+      .click();
+
+    await expect(page).toHaveURL("/products");
+    await expect(
+      page.getByRole("group", { name: "Active filters" })
+    ).toHaveCount(0);
+  });
+
+  test("ignores a filter nobody defined rather than 404ing a browse page", async ({
+    page,
+  }) => {
+    const response = await page.goto("/products?category=not-a-real-category");
+
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("group", { name: "Active filters" })
+    ).toHaveCount(0);
+  });
+});

@@ -41,6 +41,14 @@ export type ProductListProps = {
   basePath: string;
   /** Query parameters to carry across a sort change or a page step. */
   preservedParams?: Record<string, string>;
+  /**
+   * Whether to render the sort control.
+   *
+   * False on the cacheable landing pages — `/categories/[slug]` and
+   * `/status/[slug]` take no query parameters at all (ADR-027), so a sort link
+   * there would be a control that navigates to a URL the page ignores.
+   */
+  showSort?: boolean;
   /** The active search term, if the list is showing search results. */
   search?: string | null;
   /** Whether a ranked search filled its one bounded page. */
@@ -75,6 +83,7 @@ export function ProductList({
   nextCursor,
   basePath,
   preservedParams = {},
+  showSort = true,
   search = null,
   truncated = false,
   emptyTitle,
@@ -128,37 +137,45 @@ export function ProductList({
         </p>
       ) : null}
 
-      <nav
-        aria-label="Sort products"
-        hidden={Boolean(search)}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <span className="text-sm text-muted-foreground">Sort</span>
-        {PRODUCT_SORTS.map((option) => {
-          const isCurrent = option.value === sort;
+      {/*
+        Omitted entirely on a landing page rather than rendered hidden: a
+        `hidden` element still carries its links into the markup, and on
+        /categories/[slug] and /status/[slug] those links point at query
+        strings the route deliberately ignores.
+      */}
+      {showSort ? (
+        <nav
+          aria-label="Sort products"
+          hidden={Boolean(search)}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <span className="text-sm text-muted-foreground">Sort</span>
+          {PRODUCT_SORTS.map((option) => {
+            const isCurrent = option.value === sort;
 
-          return (
-            <Link
-              key={option.value}
-              href={buildHref(basePath, {
-                ...preservedParams,
-                // The default is the bare URL: one canonical address for the
-                // default view, rather than two that render the same list.
-                sort: option.value === DEFAULT_PRODUCT_SORT ? null : option.value,
-              })}
-              aria-current={isCurrent ? "true" : undefined}
-              className={cn(
-                "inline-flex h-8 items-center rounded-4xl border px-3 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
-                isCurrent
-                  ? "border-transparent bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {option.label}
-            </Link>
-          );
-        })}
-      </nav>
+            return (
+              <Link
+                key={option.value}
+                href={buildHref(basePath, {
+                  ...preservedParams,
+                  // The default is the bare URL: one canonical address for the
+                  // default view, rather than two that render the same list.
+                  sort: option.value === DEFAULT_PRODUCT_SORT ? null : option.value,
+                })}
+                aria-current={isCurrent ? "true" : undefined}
+                className={cn(
+                  "inline-flex h-8 items-center rounded-4xl border px-3 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                  isCurrent
+                    ? "border-transparent bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {option.label}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
 
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((product) => (

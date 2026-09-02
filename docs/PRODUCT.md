@@ -370,6 +370,11 @@ Creator profiles:
 
 Only index useful, unique pages. Do not generate thousands of thin parameterized pages.
 
+The three list surfaces above — `/categories/[slug]`, `/status/[slug]`, and `/products` —
+divide along that line. The two indexable ones take **no query parameters at all** (ADR-027)
+and are prerendered; `/products` is where a sort, a cursor, a search term, and the
+`?category=` / `?status=` filters live, and its canonical URL is always the bare `/products`.
+
 Every public product page should have:
 
 - unique title;
