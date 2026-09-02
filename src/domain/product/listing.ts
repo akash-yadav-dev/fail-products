@@ -16,15 +16,20 @@
  * most discussed, and most referred. Only two are here, and the omission is
  * deliberate rather than an oversight:
  *
- * - **most discussed** counts comments. The `comments` table is Phase 3 and
- *   does not exist; there is no column to order by.
+ * - **most discussed** counts comments. Phase 3 built the `comments` table, so
+ *   the number is now *computable* — and it is still not here, because the
+ *   list is keyset-paginated and a keyset needs a stored, ordered column. A
+ *   count is neither. Adding this sort means either denormalising a
+ *   `comment_count` onto `products` and keeping it correct through inserts,
+ *   moderation changes, and cascade deletes, or giving this one sort offset
+ *   pagination that `ENGINEERING.md` §5 rules out. Neither is a one-line
+ *   change, and nothing has yet asked for the sort.
  * - **most referred** counts outbound referral events. Referral tracking is
- *   Phase 4 and does not exist either.
+ *   Phase 4 and does not exist at all.
  *
- * Shipping either one now would mean ordering by a number the system cannot
- * compute, which is a lie rendered as a control. They join this list in the
- * phase that gives them a data source, and the allowlist is what makes adding
- * them a one-line change.
+ * Shipping either one now would mean ordering by a number this query cannot
+ * page through, which is a control that works on page one and lies on page
+ * two. They join this list with the column that makes them orderable.
  */
 export const PRODUCT_SORTS = [
   {

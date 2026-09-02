@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   removeSeededProduct,
-  retireSlug,
+  seedProductWithRetiredSlug,
   seedPublishedProduct,
   type SeededProduct,
 } from "./fixtures/seed-product";
@@ -120,13 +120,17 @@ test.describe("the public directory", () => {
     // This seeds its own product rather than renaming the shared one. The suite
     // runs fully parallel across two viewport projects, and a test that mutates
     // a fixture the others read is a race, not a test.
-    const renameable = await seedPublishedProduct();
+    //
+    // The fixture renames it **before** it is ever published, which closes a
+    // second race that only appeared once the suite grew: Next prefetches the
+    // links it can see, so a concurrent visitor to /products warms the ISR
+    // cache for a published product's card, and a slug retired afterwards
+    // keeps serving that cached 200 for the length of the revalidate window
+    // instead of redirecting.
+    const renameable = await seedProductWithRetiredSlug();
+    const renamed = { oldSlug: renameable.oldSlug, newSlug: renameable.slug };
 
     try {
-      const renamed = await retireSlug(
-        renameable.id,
-        `E2E Renamed ${Date.now()}${Math.random().toString(36).slice(2, 6)}`
-      );
       expect(renamed.newSlug).not.toBe(renamed.oldSlug);
 
       // The status itself, not just where the browser ended up. A temporary
