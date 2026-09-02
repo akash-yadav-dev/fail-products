@@ -117,6 +117,29 @@ Every workflow file must:
 - pin third-party actions to a full commit SHA, never a tag
 - never combine `pull_request_target` with a checkout of an untrusted ref
 
+## Actions secrets
+
+**Settings → Secrets and variables → Actions.**
+
+| Name | Kind | Used by | Notes |
+|---|---|---|---|
+| `NEON_TEST_DATABASE_URL` | Secret | `ci.yml` — `app`, `e2e` | A Neon **development** branch connection string. Never production (`AGENTS.md` §8). |
+| `DEPENDENCY_REVIEW_ENABLED` | Variable | `ci.yml` — `dependencies` | Set to `true` once the Dependency graph is enabled. |
+
+`NEON_TEST_DATABASE_URL` is what makes CI cover behaviour rather than only compilation. Without
+it every data-dependent suite — comments, reports, moderation, the directory, SEO — reports as
+*skipped*, which is honest and is also no coverage at all.
+
+The workflow reads it **only on a push to `dev` or `main`**, never on a pull request. A
+`pull_request` job uses the base branch's workflow file, so a PR cannot rewrite the job to read
+the secret — but it can rewrite a test file, and test files run with whatever the job holds. A
+fork PR gets no secrets regardless. Gating on the event is what keeps that from being a
+difference between contributors. See [`../docs/AI-WORKFLOW.md`](../docs/AI-WORKFLOW.md) §7.
+
+Point it at a Neon branch created for CI and nothing else. The suites create and own their rows
+(`tests/integration/database.ts`), so the branch may be long-lived, but it must never be a
+branch anything else reads.
+
 ## Repository metadata
 
 - **Visibility:** public
@@ -127,8 +150,39 @@ Every workflow file must:
 - **Projects:** optional
 - **Auto-delete head branches on merge:** ✅
 - **Allow merge commits:** ❌ / **Squash:** ✅ / **Rebase:** ✅ — keeps history linear
-- **Email address privacy:** ensure "Block command line pushes that expose my email" is enabled
-  on the account, so a misconfigured clone cannot leak a private address
+- **Email address privacy:** see below — this is not currently satisfied
+
+## Account email privacy — outstanding
+
+**Settings → Emails**, on the *account*, not the repository. Two settings, both required:
+
+| Setting | Why |
+|---|---|
+| Keep my email addresses private | Web-based Git operations — including the **Merge pull request** button — commit as the `users.noreply.github.com` address instead of the account's primary one |
+| Block command line pushes that expose my email | A clone whose `user.email` was never overridden is rejected at push rather than published |
+
+**Neither was enabled while pull requests #1 through #5 were merged.** The repository-local
+identity from `scripts/setup-git-identity.sh` governs commits made locally, and every commit
+authored that way is correct. It does not govern a merge commit created by GitHub's own merge
+button, which uses the account's primary address.
+
+The result: **five merge commits carry a private address.** `5bce6c8` and `5169a97` are
+reachable from `main`; `39681b7`, `fd29cfa` and `2eb1b1a` are reachable from `dev`. No commit
+on any feature branch is affected — `scripts/verify-changes.sh` blocks those before they leave
+the machine, and it did.
+
+Enabling both settings stops the sixth. **It does not undo the five.** They are published in a
+public repository: clones, forks, the events API, and search indexes have them, and rewriting
+`main` would require a force-push to a protected branch — which this document forbids, which
+agents may not perform, and which would not un-publish anything that has already been fetched.
+Treat the address as disclosed and enable the settings so the set stops growing.
+
+Verify after enabling, without printing the address:
+
+```bash
+# Expect no output. Any line is a commit carrying a non-allowlisted address.
+git log --format='%H %ae %ce' origin/main origin/dev   | grep -v '180740493+akash-yadav-dev@users.noreply.github.com.*180740493+akash-yadav-dev@users.noreply.github.com'   | cut -c1-8
+```
 
 ## Verification
 
@@ -161,3 +215,44 @@ Then, on GitHub:
 
 The fourth row is the one to check first: if it is **not** mergeable, the bypass mode was left
 empty or set to something other than "For pull requests only", and every future PR will stall.
+
+### Measured state — 2026-09-02
+
+Read from the API rather than assumed. Two rulesets exist and are **active**, one per branch,
+and both carry the same three rules:
+
+| Rule | `main` | `dev` |
+|---|---|---|
+| `deletion` — restrict deletions | ✅ | ✅ |
+| `non_fast_forward` — block force pushes | ✅ | ✅ |
+| `pull_request` — 1 approval, code-owner review required | ✅ | ✅ |
+
+Everything else this document specifies is **not configured**:
+
+| Promised above | Configured | Consequence while it is missing |
+|---|---|---|
+| Require status checks to pass | ❌ | **CI is not a merge gate.** A pull request can be merged with `Repository hygiene`, `Lint, typecheck, test, build`, or `End-to-end` red, and nothing stops it. Every guarantee in [`../docs/AI-VERIFICATION.md`](../docs/AI-VERIFICATION.md) rests on this rule existing |
+| Dismiss stale approvals on new commits | ❌ | An approval survives new work pushed onto the branch it approved |
+| Require linear history | ❌ | Merge commits are permitted — which is also why merge-button commits exist at all; see the email section above |
+| Require signed commits | ❌ | Documented as "recommended once commit signing is configured"; signing is not configured |
+| Restrict merges to `dev` only (on `main`) | ❌ | A feature branch can open a pull request straight into `main` and skip integration entirely. This is the row described above as "the one that makes the promotion path real rather than a convention" |
+
+Repository-level settings also differ from [Repository metadata](#repository-metadata):
+`allow_merge_commit` is **true** (specified ❌) and the wiki is **enabled** (specified disabled).
+
+To read the same thing back at any time:
+
+```bash
+R=akash-yadav-dev/fail-products
+for id in $(gh api repos/$R/rulesets --jq '.[].id'); do
+  gh api repos/$R/rulesets/$id --jq '"\(.name): \([.rules[].type] | join(", "))"'
+done
+gh api repos/$R --jq '{allow_merge_commit, allow_squash_merge, allow_rebase_merge, has_wiki}'
+```
+
+Adding the status-check rule has one failure mode worth stating in advance: the contexts must
+match the job `name:` values in [`workflows/ci.yml`](workflows/ci.yml) exactly — `Repository
+hygiene`, `Lint, typecheck, test, build`, `End-to-end` — because a required check that never
+reports is indistinguishable from one that has not finished, and the pull request waits
+forever. Add it, then confirm with a throwaway pull request before relying on it.
+
