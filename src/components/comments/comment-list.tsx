@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { CommentBody } from "@/components/comments/comment-body";
+import { ReportDialog } from "@/components/comments/report-dialog";
+import type { FormActionState } from "@/lib/forms/action-state";
 
 /**
  * A product's discussion.
@@ -26,10 +28,17 @@ export type CommentListItem = {
 export function CommentList({
   comments,
   productOwnerId,
+  reportAction,
+  turnstileSiteKey,
 }: {
   comments: readonly CommentListItem[];
   /** Null on an anonymised listing. Drives the founder indicator. */
   productOwnerId: string | null;
+  reportAction: (
+    state: FormActionState | null,
+    formData: FormData
+  ) => Promise<FormActionState>;
+  turnstileSiteKey: string | null;
 }) {
   if (comments.length === 0) {
     return (
@@ -83,6 +92,21 @@ export function CommentList({
               >
                 {comment.createdAt.toISOString().slice(0, 10)}
               </time>
+
+              {/*
+                docs/MODERATION.md §5: every public comment carries a report
+                action. It sits in the byline rather than under the text, so it
+                is reachable without being the thing the eye lands on.
+              */}
+              <div className="ml-auto">
+                <ReportDialog
+                  targetType="COMMENT"
+                  targetId={comment.id}
+                  label={`the comment by ${comment.authorUsername ?? "a deleted account"}`}
+                  action={reportAction}
+                  turnstileSiteKey={turnstileSiteKey}
+                />
+              </div>
             </div>
 
             <CommentBody body={comment.body} />

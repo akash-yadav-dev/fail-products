@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { MAX_COMMENT_LENGTH } from "@/domain/comment/body";
 import { ACCOUNT_HINT_COOKIE } from "@/lib/auth/account-hint";
 import type { FormActionState } from "@/lib/forms/action-state";
@@ -36,9 +37,12 @@ type PostAction = (
 export function CommentComposer({
   productId,
   action,
+  turnstileSiteKey,
 }: {
   productId: string;
   action: PostAction;
+  /** Null when Turnstile is not configured. Resolved server-side. */
+  turnstileSiteKey: string | null;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const [length, setLength] = useState(0);
@@ -94,6 +98,8 @@ export function CommentComposer({
           Plain text. Links are shown as their destination.
         </p>
       </div>
+
+      <TurnstileWidget siteKey={turnstileSiteKey} action="comment" />
 
       {state && !state.ok ? (
         <Alert variant="destructive">

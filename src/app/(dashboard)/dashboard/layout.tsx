@@ -8,6 +8,7 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { SkipToContent } from "@/components/layout/skip-to-content";
 import { SESSION_COOKIE } from "@/lib/auth/session-cookie";
 import { getSessionUser } from "@/services/auth/server-auth";
+import { isModerator } from "@/services/user/server-profile";
 import { e2eAuthBypassEnabled } from "@/lib/config/auth";
 import { signOutAction } from "@/app/(site)/auth/actions";
 
@@ -32,16 +33,23 @@ export default async function DashboardLayout({
   const cookieStore = await cookies();
   const testBypass =
     e2eAuthBypassEnabled() && cookieStore.get(TEST_COOKIE)?.value === "1";
+
+  let moderator = false;
   if (!testBypass) {
     const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
     const session = await getSessionUser(sessionToken ?? "");
     if (!session) redirect("/auth/sign-in");
+
+    // Decides whether the moderation link is rendered, and nothing more. The
+    // route 404s and every action re-checks the role, so a wrong answer here
+    // is a missing link rather than an authorization hole.
+    moderator = await isModerator(session.userId);
   }
 
   return (
     <SidebarProvider>
       <SkipToContent />
-      <DashboardSidebar signOutAction={signOutAction} />
+      <DashboardSidebar signOutAction={signOutAction} isModerator={moderator} />
 
       <SidebarInset asChild>
         <div>

@@ -113,8 +113,8 @@ Any migration that introduces a new personal-data column must add a row here in 
 | Products owned | owner-choice: delete, or transfer to anonymous authorship | until deletion | the founder's own disclosure |
 | Product content (descriptions, story) | removed with the product if deleted | indefinite while published | the published record |
 | Comments | anonymised, text retained | indefinite | removing them destroys the thread context others rely on |
-| Comment reports | reporter anonymised, report retained | 12 months | abuse-pattern detection |
-| Moderation actions | actor retained (staff), subject anonymised | 24 months | auditability, appeals |
+| Reports (product and comment) | reporter anonymised, report retained | 12 months | abuse-pattern detection |
+| Moderation actions (`comment_status_history`) | actor anonymised on deletion, action retained | 24 months | auditability, appeals |
 | `product_status_history` | subject anonymised, transitions retained | indefinite | the recovery timeline is the product |
 | Waitlist entries | erased on request by the subscriber | until product deletion or unsubscribe | consent-based |
 | Waitlist CSV exports | not retained server-side | not stored | generated on demand only |

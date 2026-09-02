@@ -11,7 +11,7 @@ export type DashboardNavItem = {
   href: string;
   label: string;
   /** Key into the icon map in components/dashboard/dashboard-sidebar.tsx. */
-  icon: "gauge" | "package" | "settings" | "compass" | "plus" | "scale";
+  icon: "gauge" | "package" | "settings" | "compass" | "plus" | "scale" | "shield";
   /** Reachable today, or waiting on a phase that has not shipped. */
   available: boolean;
   /** Shown in the sidebar tooltip when collapsed to icons. */
@@ -78,7 +78,35 @@ export const dashboardNav: readonly DashboardNavGroup[] = [
   },
 ] as const;
 
+/**
+ * The moderation group, shown only to an account holding the role.
+ *
+ * Kept out of `dashboardNav` rather than filtered out of it, because a nav item
+ * whose visibility depends on a role is a different kind of thing from one that
+ * is simply always there — and merging them would put the decision in a
+ * `.filter()` somewhere, which is where it gets forgotten.
+ *
+ * Hiding the link is not the control. `/dashboard/moderation` 404s for anybody
+ * without the role, and every action re-checks it server-side
+ * (`docs/SECURITY.md` §3).
+ */
+export const moderationNav: DashboardNavGroup = {
+  title: "Moderation",
+  items: [
+    {
+      href: "/dashboard/moderation",
+      label: "Report queue",
+      icon: "shield",
+      available: true,
+      description: "Reports waiting on a decision",
+    },
+  ],
+} as const;
+
 /** Every dashboard route, flattened — the breadcrumb resolves labels from this. */
-export const dashboardRoutes: readonly DashboardNavItem[] = dashboardNav
+export const dashboardRoutes: readonly DashboardNavItem[] = [
+  ...dashboardNav,
+  moderationNav,
+]
   .flatMap((group) => group.items)
   .filter((item) => item.href.startsWith("/dashboard"));
