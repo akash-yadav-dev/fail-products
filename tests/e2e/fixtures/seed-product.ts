@@ -87,20 +87,74 @@ export async function seedPublishedProduct(): Promise<SeededProduct> {
   };
 }
 
-/** Renames a seeded product, retiring its slug so the 301 has something to follow. */
-export async function retireSlug(productId: string, newName: string) {
+/**
+ * A published product whose previous slug has been retired.
+ *
+ * The rename happens **while the product is still a draft**, and the reason is
+ * a race that only shows up in the full suite. `/products/[slug]` is
+ * prerendered with a five-minute window (ADR-027), and Next prefetches the
+ * links it can see — so any concurrent visitor to `/products` warms the cache
+ * for a published product's card, and a slug retired afterwards keeps serving
+ * the cached 200 instead of the redirect. Renaming before the listing is ever
+ * public means nothing has had a card to prefetch, so the redirect is the only
+ * thing the old URL has ever returned.
+ *
+ * That staleness is real behaviour rather than a test artefact — a rename
+ * through the application invalidates both paths (`server-product.ts`), which
+ * this fixture cannot do from outside the server process.
+ */
+export async function seedProductWithRetiredSlug(): Promise<
+  SeededProduct & { oldSlug: string }
+> {
   const database = db();
   const repository = new ProductRepository(database);
-  const before = await repository.findForAuthorization(productId);
 
-  const moved = await updateProduct({
+  const handle = unique("e2eowner");
+  const [owner] = await database
+    .insert(users)
+    .values({
+      username: handle,
+      usernameLower: handle.toLowerCase(),
+      email: `${handle}@example.test`,
+    })
+    .returning();
+
+  const created = await createProduct({
     repository,
-    viewer: { userId: before!.ownerId! },
-    productId,
-    name: newName,
+    ownerId: owner!.id,
+    name: `E2E Renamed ${unique("before")}`,
+    tagline: "It changed its name after launch, as products do.",
+    websiteUrl: "https://example.com/",
+    failureStatus: "ABANDONED",
   });
 
-  return { oldSlug: before!.slug, newSlug: moved.slug };
+  const name = `E2E Renamed ${unique("after")}`;
+  const moved = await updateProduct({
+    repository,
+    viewer: { userId: owner!.id },
+    productId: created.id,
+    name,
+  });
+
+  if (moved.slug === created.slug) {
+    throw new Error("The rename did not retire a slug; the fixture is broken.");
+  }
+
+  await changePublicationState({
+    repository,
+    viewer: { userId: owner!.id },
+    productId: created.id,
+    to: "PUBLISHED",
+  });
+
+  return {
+    id: created.id,
+    slug: moved.slug,
+    oldSlug: created.slug,
+    name,
+    ownerId: owner!.id,
+    ownerUsername: handle,
+  };
 }
 
 export async function removeSeededProduct(seeded: SeededProduct) {

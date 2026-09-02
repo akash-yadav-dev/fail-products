@@ -1,4 +1,6 @@
 // src/services/product/server-product.ts
+import { revalidatePath } from "next/cache";
+
 import { getDb } from "@/db";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
@@ -32,10 +34,34 @@ export function createProduct(
   return createProductUseCase({ ...input, repository: repository() });
 }
 
-export function updateProduct(
+/**
+ * Edits a product, and invalidates every URL the edit changed.
+ *
+ * A rename retires a slug (ADR-019), and `/products/[slug]` is prerendered with
+ * a five-minute window (ADR-027) — so without this the old URL keeps serving
+ * the cached page instead of redirecting, and the new one is not there yet.
+ * Five minutes of a stale canonical is exactly the loss ADR-019 exists to
+ * prevent, in miniature.
+ *
+ * The invalidation lives here rather than in the use case because the use case
+ * imports nothing from Next (`AGENTS.md` §5), and this binding is the layer
+ * that is allowed to.
+ */
+export async function updateProduct(
   input: Without<Parameters<typeof updateProductUseCase>[0]>
 ) {
-  return updateProductUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await updateProductUseCase({
+    ...input,
+    repository: repository(),
+  });
+
+  revalidatePath(`/products/${result.slug}`);
+  if (before && before.slug !== result.slug) {
+    revalidatePath(`/products/${before.slug}`);
+  }
+
+  return result;
 }
 
 export function changePublicationState(
