@@ -234,6 +234,11 @@ every request, and the egress allowance will be exhausted long before storage or
 Treat the cache hit ratio on `/products/[slug]` and `/categories/[slug]` as a launch-blocking
 metric, and verify it in the release check.
 
+A route that awaits `searchParams` is dynamically rendered and cannot be cached at all, so a
+public list is cacheable or it is parameterized — never both. ADR-027 settles which surfaces
+get which: `/products/[slug]`, `/categories/[slug]`, and `/status/[slug]` are prerendered with
+`revalidate = 300`; `/products` carries every parameter and stays dynamic.
+
 ## 12. Incident response
 
 For any production issue:
