@@ -232,11 +232,65 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # A credential only on a push to a protected branch, never on a pull
+      # request. docs/AI-WORKFLOW.md §7 is the constraint: a database credential
+      # does not belong in a public repository's PR runs. The reason is specific
+      # — a pull_request run uses the *base* branch's workflow file, so a PR
+      # cannot rewrite this job to exfiltrate the secret, but it can rewrite a
+      # test file, and test files run with whatever the job has. A fork PR gets
+      # no secrets at all, so gating on the event keeps every PR identical
+      # rather than making coverage depend on who opened it.
+      #
+      # push to dev and main is where it is safe: both are protected and
+      # written by merge only, so the code being run has already been reviewed.
+      # That also puts the check exactly where the branch model wants it —
+      # dev is where a change is verified before it can be promoted to main.
+      - name: Detect database credential
+        id: db
+        env:
+          # A Neon *development* branch, never production (AGENTS.md §8).
+          NEON: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: |
+          # Only ever report whether there is one. Never the value.
+          if [ -n "${NEON:-}" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "has_db=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_db=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No database in this run - the data-dependent suites will report as skipped, not passed. Set the NEON_TEST_DATABASE_URL secret to cover them on pushes to dev and main."
+          fi
+
+      - name: Migrate the test database
+        if: steps.db.outputs.has_db == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: pnpm db:migrate
+
       - name: Test
         if: needs.detect.outputs.has_tests == 'true'
+        env:
+          # Empty when absent, which is what makes the integration suites skip
+          # themselves rather than fail (tests/integration/database.ts).
+          DATABASE_URL: ${{ steps.db.outputs.has_db == 'true' && secrets.NEON_TEST_DATABASE_URL || '' }}
         run: pnpm test
 
+      # The step above skips the integration layer silently when there is no
+      # database, which is correct. It is not correct when there *is* one: a
+      # suite that skipped for an unrelated reason would still read as green.
+      # This runs the same layer through scripts/require-database.mjs, which
+      # exits non-zero rather than pass having run nothing.
+      - name: Integration tests
+        if: steps.db.outputs.has_db == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: pnpm test:integration
+
       - name: Build
+        env:
+          # Deliberately empty, even when a credential exists. The category and
+          # status pages are statically rendered (ADR-027), and a build with a
+          # reachable database hides the case where a page reads it at build
+          # time. That regression shipped once and this shape is what caught it.
+          DATABASE_URL: ""
         run: pnpm build
 
       - name: Audit production dependencies
@@ -244,8 +298,13 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # E2E is slower and needs a browser, so it is a separate job that only runs
-  # once a Playwright config exists. Integration tests needing a Neon branch are
-  # deliberately not run here — see docs/AI-WORKFLOW.md.
+  # once a Playwright config exists.
+  #
+  # The data-dependent specs skip themselves without DATABASE_URL, so on a pull
+  # request this job proves the application compiles and its static routes work,
+  # and nothing about comments, reports, or moderation. On a push to dev or main
+  # it gets the same Neon development branch the app job used and runs them for
+  # real. Same reasoning as the app job above; docs/AI-WORKFLOW.md §7.
   # ---------------------------------------------------------------------------
   e2e:
     name: End-to-end
@@ -262,7 +321,25 @@ jobs:
       - name: Install browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Detect database credential
+        id: db
+        env:
+          NEON: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: |
+          # Never echo the value. The app job already migrated this branch.
+          if [ -n "${NEON:-}" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "has_db=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_db=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No database in this run - the data-dependent E2E specs will report as skipped, not passed."
+          fi
+
       - name: Run E2E
+        env:
+          # playwright.config.ts forwards this to the server it starts, and the
+          # specs read it to decide whether to skip. Absent means skipped and
+          # reported as skipped, never quietly passed.
+          DATABASE_URL: ${{ steps.db.outputs.has_db == 'true' && secrets.NEON_TEST_DATABASE_URL || '' }}
         run: pnpm test:e2e
 
       - name: Upload report
