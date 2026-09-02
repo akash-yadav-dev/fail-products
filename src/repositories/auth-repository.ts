@@ -1,10 +1,18 @@
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
-import { authAccounts, authRateLimits, authTokens, sessions, users } from "@/db/schema";
+import { authAccounts, authTokens, sessions, users } from "@/db/schema";
+import {
+  RateLimitRepository,
+  type RateLimitScope,
+} from "@/repositories/rate-limit-repository";
 
 export class AuthRepository {
-  constructor(private readonly db: Database) {}
+  private readonly limits: RateLimitRepository;
+
+  constructor(private readonly db: Database) {
+    this.limits = new RateLimitRepository(db);
+  }
 
   async cleanupAuthData(now: number) {
     const date = new Date(now);
@@ -12,39 +20,23 @@ export class AuthRepository {
     await this.db.delete(sessions).where(sql`${sessions.expiresAt} <= ${date} OR ${sessions.revokedAt} IS NOT NULL`);
   }
 
-  async consumeRateLimit(input: {
-    scope: "EMAIL" | "IP";
+  /**
+   * Auth's counted limits, on the application-wide counter table.
+   *
+   * Auth used to own a table of its own, `auth_rate_limits`. It was the same
+   * shape as this one and there is only one counting algorithm worth having,
+   * so Phase 3 folded it in (migrations 0008 and 0009) rather than write a
+   * second copy for comments and reports. The forwarding keeps the auth
+   * service's dependency unchanged: it already holds this repository.
+   */
+  consumeRateLimit(input: {
+    scope: RateLimitScope;
     keyHash: string;
     limit: number;
     windowSeconds: number;
     now: number;
   }) {
-    const nowDate = new Date(input.now);
-    const windowStart = new Date(input.now - input.windowSeconds * 1000);
-    const expired = sql`${authRateLimits.windowStartedAt} <= ${windowStart}`;
-    await this.db
-      .delete(authRateLimits)
-      .where(sql`${authRateLimits.updatedAt} <= ${windowStart}`);
-    const [row] = await this.db
-      .insert(authRateLimits)
-      .values({
-        scope: input.scope,
-        keyHash: input.keyHash,
-        windowStartedAt: nowDate,
-        count: 1,
-      })
-      .onConflictDoUpdate({
-        target: [authRateLimits.scope, authRateLimits.keyHash],
-        set: {
-          count: sql`CASE WHEN ${expired} THEN 1 ELSE ${authRateLimits.count} + 1 END`,
-          windowStartedAt: sql`CASE WHEN ${expired} THEN ${nowDate} ELSE ${authRateLimits.windowStartedAt} END`,
-          updatedAt: nowDate,
-        },
-      })
-      .returning({ count: authRateLimits.count, windowStartedAt: authRateLimits.windowStartedAt });
-    if (!row) return { allowed: false, remaining: 0, resetAt: input.now + input.windowSeconds * 1000 };
-    const resetAt = row.windowStartedAt.getTime() + input.windowSeconds * 1000;
-    return { allowed: row.count <= input.limit, remaining: Math.max(0, input.limit - row.count), resetAt };
+    return this.limits.consume(input);
   }
 
   insertToken(input: { email: string; tokenHash: string; expiresAt: Date }) {

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { authRateLimits, authTokens, users } from "@/db/schema";
+import { authTokens, rateLimits, users } from "@/db/schema";
 import { requestEmailCode, verifyEmailCode } from "@/services/auth/auth-service";
 import { AuthRepository } from "@/repositories/auth-repository";
 import { sha256Base64Url } from "@/lib/auth/crypto";
@@ -105,6 +105,6 @@ describe.skipIf(noDatabase)("passwordless authentication", () => {
       sha256Base64Url(`verify-ip:IP:${ip}-expired`),
       sha256Base64Url(`request-ip:IP:${ip}-limited`),
     ]);
-    for (const keyHash of hashes) await db!.delete(authRateLimits).where(eq(authRateLimits.keyHash, keyHash));
+    for (const keyHash of hashes) await db!.delete(rateLimits).where(eq(rateLimits.keyHash, keyHash));
   });
 });
