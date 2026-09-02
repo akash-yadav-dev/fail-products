@@ -4,6 +4,10 @@ import { headers } from "next/headers";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import {
+  ACCOUNT_HINT_COOKIE,
+  accountHintCookieOptions,
+} from "@/lib/auth/account-hint";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/auth/session-cookie";
 import {
 } from "@/services/auth/server-auth";
@@ -55,7 +59,12 @@ export async function verifyCodeAction(
   if (!result.ok) {
     return { ok: false, message: "That code is invalid or expired. Request a new one and try again." };
   }
-  (await cookies()).set(SESSION_COOKIE, result.sessionToken, SESSION_COOKIE_OPTIONS);
+  const store = await cookies();
+  store.set(SESSION_COOKIE, result.sessionToken, SESSION_COOKIE_OPTIONS);
+  // Paired with the session, always. A hint left behind after sign-out shows a
+  // comment form to somebody who cannot use it; a hint missing after sign-in
+  // hides one from somebody who can. Both are cosmetic, and both are avoidable.
+  store.set(ACCOUNT_HINT_COOKIE, "1", accountHintCookieOptions());
   redirect("/dashboard");
 }
 
@@ -66,4 +75,5 @@ export async function signOutAction(): Promise<void> {
     await revokeSession(token);
   }
   store.delete(SESSION_COOKIE);
+  store.delete(ACCOUNT_HINT_COOKIE);
 }
