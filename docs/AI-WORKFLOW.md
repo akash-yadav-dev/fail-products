@@ -206,9 +206,32 @@ push succeed.
 - **dependencies** — dependency review on pull requests, with a licence deny-list for
   AGPL-3.0-only distribution.
 
-Integration tests that need a Neon branch do **not** run in CI. They need a database branch and
-a credential, and neither belongs in a public repository's PR runs. They run locally and in
+Integration tests that need a Neon branch do **not** run on pull requests. A credential does not
+belong in a public repository's PR run: a `pull_request` job uses the base branch's workflow
+file, so a PR cannot rewrite the job to read the secret — but it can rewrite a test file, and
+test files run with whatever the job holds. A fork PR gets no secrets at all, so gating on the
+event is also what keeps every PR's coverage identical rather than dependent on who opened it.
+
+They **do** run on a push to `dev` and `main`. Both are protected and written by merge only, so
+the code being run has already been reviewed and approved, and this is where the branch model
+already expects verification to happen — `dev` is where a change is proved before it can be
+promoted. The workflow reads `secrets.NEON_TEST_DATABASE_URL` (a Neon **development** branch,
+never production — AGENTS.md §8), applies migrations, then runs `pnpm test` and `pnpm test:e2e`
+with it, plus `pnpm test:integration` explicitly.
+
+That last step is not redundant. `pnpm test` lets the integration suites skip themselves when
+there is no database, which is correct on a PR and silently wrong when a credential is present
+and something else made them skip. `pnpm test:integration` goes through
+`scripts/require-database.mjs`, which exits non-zero rather than pass having run nothing.
+
+**Until that secret exists, CI covers that the data-dependent code compiles and nothing about
+what it does.** The suites report as *skipped*, never as passed. They also run locally and in
 `release-check`.
+
+The `Build` step is deliberately given an **empty** `DATABASE_URL` even when the secret is set.
+The category and status pages are statically rendered (ADR-027), and a build that can reach a
+database hides a page reading one at build time — a regression that shipped once and was caught
+only by running the credential-free CI shape locally.
 
 MCP servers are never required for CI. CI must pass for a contributor with no external accounts.
 
