@@ -84,6 +84,52 @@ describe("the category taxonomy", () => {
     }
   });
 
+  it("has not changed or removed a published slug", () => {
+    // ADR-026 amendment. A category slug is a URL and categories have no
+    // redirect history — products got product_slug_history in ADR-019 exactly
+    // because a rename discards every inbound link invisibly, and nothing gives
+    // categories the same protection. So the published set is frozen: renaming
+    // `developer-tools` would 404 every link that ever pointed at
+    // /categories/developer-tools, and no code path would report it.
+    //
+    // This list is deliberately duplicated rather than derived from
+    // PRODUCT_CATEGORIES — a test that reads the value it is guarding proves
+    // nothing. Adding a category is additive and does not fail this; changing
+    // or removing one does, which is the whole point.
+    // string[], not the union PRODUCT_CATEGORIES infers. Typing it as the
+    // union would make a removed slug a *compile* error naming this file
+    // instead of the assertion failure that explains why it matters.
+    const published: string[] = [
+      "ai",
+      "developer-tools",
+      "saas",
+      "productivity",
+      "marketplace",
+      "social",
+      "ecommerce",
+      "fintech",
+      "health",
+      "education",
+      "games",
+      "hardware",
+      "other",
+    ];
+
+    const current = new Set<string>(
+      PRODUCT_CATEGORIES.map((category) => category.slug)
+    );
+
+    for (const slug of published) {
+      expect(
+        current.has(slug),
+        `Category slug "${slug}" is published and frozen (ADR-026 amendment). ` +
+          "Renaming it 404s every inbound link, because categories have no " +
+          "redirect history. Change the name or description instead, or add a " +
+          "new category and leave this one in place."
+      ).toBe(true);
+    }
+  });
+
   it("keeps an overflow category so nothing has to be mislabelled", () => {
     // Without it a founder files their product under something it is not, and
     // a taxonomy full of deliberate mislabels is worse than a junk drawer.

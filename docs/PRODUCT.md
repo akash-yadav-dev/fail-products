@@ -408,24 +408,41 @@ Normalized classification. **A fixed, curated list** — only a migration adds a
 product picks at most one (ADR-026). The list is specified in
 `src/domain/product/category.ts` and seeded by `drizzle/migrations/0006_seed_categories.sql`:
 
-| Slug | Name |
-|---|---|
-| `ai` | AI |
-| `developer-tools` | Developer tools |
-| `saas` | SaaS |
-| `productivity` | Productivity |
-| `marketplace` | Marketplace |
-| `social` | Social |
-| `ecommerce` | E-commerce |
-| `fintech` | Fintech |
-| `health` | Health |
-| `education` | Education |
-| `games` | Games |
-| `hardware` | Hardware |
-| `other` | Other |
+| Slug | Name | Axis |
+|---|---|---|
+| `ai` | AI | domain |
+| `developer-tools` | Developer tools | audience |
+| `saas` | SaaS | business model |
+| `productivity` | Productivity | audience |
+| `marketplace` | Marketplace | business model |
+| `social` | Social | audience |
+| `ecommerce` | E-commerce | domain |
+| `fintech` | Fintech | domain |
+| `health` | Health | domain |
+| `education` | Education | domain |
+| `games` | Games | domain |
+| `hardware` | Hardware | domain |
+| `other` | Other | overflow |
 
 The list is fixed because §9 below forbids generating thousands of thin parameterized pages,
 and a free-form taxonomy produces exactly that from typos and casing alone.
+
+**Slugs are frozen once published; only the name and description may change.** Products carry a
+redirect history for renames (ADR-019) and categories carry none, so a renamed category 404s
+every link that ever pointed at it. Adding a category is additive and allowed; renaming one is
+not. `tests/unit/domain/product/category.test.ts` pins the published set so the rule fails a
+build rather than only appearing here.
+
+**Filing rule — pick what the product was for, not how it was sold.** The Axis column is why the
+rule is needed: the list mixes domains, audiences, and business models, and a product picks at
+most one, so an AI SaaS built for developers has three defensible homes. Use SaaS or Marketplace
+**only when no domain category fits**. Without this each category page shows an arbitrary slice
+of the products that belong on it.
+
+The rule is a convention, not a constraint. The submit form states it and shows each category's
+description; it is deliberately not validated server-side, because nothing there could
+distinguish an honest judgement call from a wrong one, and refusing a submission over a taxonomy
+opinion costs more than the misfiling does.
 
 ### ProductTag
 
