@@ -64,3 +64,14 @@ export function findSourceTier(value: SourceTier): SourceTierDefinition {
  * defect `LEGAL.md` §3 names.
  */
 export const OWNER_SUPPLIED_TIER: SourceTier = "CREATOR_CLAIM";
+
+/**
+ * The tier every community comment carries.
+ *
+ * `docs/MODERATION.md` §8 is explicit: never label an unverified community
+ * comment as a factual product diagnosis. The discussion section is labelled
+ * once, at its heading, rather than per comment — a badge on every row reads as
+ * a disclaimer nobody finishes, and the section boundary is what the claim
+ * actually applies to.
+ */
+export const COMMUNITY_OPINION_TIER: SourceTier = "COMMUNITY_OPINION";

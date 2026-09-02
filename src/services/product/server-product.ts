@@ -1,5 +1,6 @@
 // src/services/product/server-product.ts
 import { getDb } from "@/db";
+import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
 import {
   changeFailureStatus as changeFailureStatusUseCase,
@@ -63,9 +64,31 @@ export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);
 }
 
+/**
+ * One page of the public directory.
+ *
+ * The build guard lives here rather than in each page because every prerendered
+ * list calls this — `/categories/[slug]` and `/status/[slug]` since ADR-027 made
+ * them static, and `/products/[slug]` for its related listings. CI builds with
+ * no `DATABASE_URL` on purpose (`.github/workflows/ci.yml`), and a guard a page
+ * has to remember is a guard the next page forgets. An empty page is the honest
+ * answer during a build with no database; at runtime the missing variable still
+ * throws, because a deployed site quietly rendering "nothing here" is the silent
+ * failure `docs/ENGINEERING.md` §1.9 forbids.
+ */
 export function listPublicDirectory(
   input: Without<Parameters<typeof listPublicDirectoryUseCase>[0]> = {}
 ) {
+  if (canSkipDatabaseAtBuild()) {
+    return Promise.resolve({
+      items: [],
+      sort: "newest" as const,
+      search: null,
+      truncated: false,
+      nextCursor: null,
+    });
+  }
+
   return listPublicDirectoryUseCase({ ...input, repository: repository() });
 }
 

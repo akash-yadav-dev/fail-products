@@ -4,9 +4,10 @@ import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CommentComposer } from "@/components/comments/comment-composer";
+import { CommentList } from "@/components/comments/comment-list";
 import { ProductCard } from "@/components/products/product-card";
 import { StatusBadge } from "@/components/products/status-badge";
 import {
@@ -17,15 +18,20 @@ import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
 import { BreadcrumbJsonLd } from "@/components/shared/structured-data";
 import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
-import { OWNER_SUPPLIED_TIER } from "@/domain/product/source-tier";
+import {
+  COMMUNITY_OPINION_TIER,
+  OWNER_SUPPLIED_TIER,
+} from "@/domain/product/source-tier";
 import { OUTBOUND_CAMPAIGNS, buildOutboundProductUrl } from "@/lib/urls/outbound";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { externalUrlHost } from "@/lib/validation/url";
+import { listComments } from "@/services/comment/server-comment";
 import {
   listProductsForSitemap,
   listPublicDirectory,
   resolvePublicProduct,
 } from "@/services/product/server-product";
+import { postCommentAction } from "./actions";
 
 /**
  * A product listing.
@@ -144,7 +150,13 @@ export default async function ProductPage({
   // relatedness signal needs categories on more than a handful of rows, and a
   // fabricated one would put this product's name beside another founder's
   // product on the strength of nothing.
-  const related = await listPublicDirectory({ pageSize: 3 });
+  // Two reads, issued together: neither needs the other's answer, and this
+  // page is prerendered, so the pair happens once per revalidation rather than
+  // once per visitor.
+  const [related, discussion] = await Promise.all([
+    listPublicDirectory({ pageSize: 3 }),
+    listComments({ productId: product.id }),
+  ]);
   const others = related.items.filter((item) => item.id !== product.id).slice(0, 3);
 
   return (
@@ -257,18 +269,44 @@ export default async function ProductPage({
               </SourcedSection>
             ) : null}
 
-            <section className="flex flex-col gap-3">
+            <section id="discussion" className="flex flex-col gap-5">
               <h2 className="text-xl font-semibold tracking-tight">
                 Community discussion
+                {discussion.items.length > 0 ? (
+                  <span className="ml-2 text-base font-normal text-muted-foreground">
+                    {discussion.items.length}
+                    {discussion.hasMore ? "+" : ""}
+                  </span>
+                ) : null}
               </h2>
-              <Alert>
-                <AlertTitle>Comments are not open yet</AlertTitle>
-                <AlertDescription>
-                  Discussion arrives with the community phase. Until it does,
-                  this page carries only what the founder said about their own
-                  product.
-                </AlertDescription>
-              </Alert>
+
+              {/*
+                Every comment here is a community opinion and is labelled as
+                one. docs/LEGAL.md §3 and docs/MODERATION.md §8 both require
+                the distinction: an unattributed sentence on this page reads as
+                FailProducts asserting a fact about a named real business.
+              */}
+              <SourceTierBadge tier={COMMUNITY_OPINION_TIER} />
+
+              <CommentList
+                comments={discussion.items}
+                productOwnerId={product.ownerId}
+              />
+
+              {discussion.hasMore ? (
+                // Said plainly rather than hidden. The page is prerendered and
+                // takes no query parameters (ADR-027), so page two would cost
+                // the cache; a listing that overflows this is the measurement
+                // that justifies paying for it (CLAUDE.md §7).
+                <p className="text-sm text-muted-foreground">
+                  Showing the first {discussion.items.length} comments.
+                </p>
+              ) : null}
+
+              <CommentComposer
+                productId={product.id}
+                action={postCommentAction}
+              />
             </section>
 
             {others.length > 0 ? (
