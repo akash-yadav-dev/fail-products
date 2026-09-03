@@ -1,5 +1,5 @@
 // src/repositories/report-repository.ts
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import {
@@ -132,7 +132,14 @@ export class ReportRepository {
         sql`${products.id} = coalesce(${reports.productId}, ${comments.productId})`
       )
       .where(eq(reports.status, status))
-      .orderBy(desc(reports.createdAt))
+      // Oldest first, which is how a queue is worked rather than how a feed is
+      // read. Newest-first with a hard limit starves: once there are more open
+      // reports than the page holds, every new arrival pushes the oldest
+      // further out of reach and they can never be worked at all — and the
+      // oldest are the ones that have been waiting longest. Oldest-first makes
+      // the same bound self-draining. `reports_status_created_idx` covers
+      // either direction, so this costs nothing.
+      .orderBy(asc(reports.createdAt))
       .limit(limit);
   }
 
