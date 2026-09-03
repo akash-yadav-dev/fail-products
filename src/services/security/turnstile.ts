@@ -55,5 +55,11 @@ export async function verifyTurnstile(
   });
 }
 
-/** The form field Turnstile's own script injects. */
-export const TURNSTILE_FIELD = "cf-turnstile-response";
+/**
+ * The form field carrying the token, re-exported so an action importing the
+ * verifier gets the field name from the same import.
+ *
+ * Defined in `domain/` because the widget is a client component and cannot
+ * import this module — see `src/domain/shared/turnstile-field.ts`.
+ */
+export { TURNSTILE_FIELD } from "@/domain/shared/turnstile-field";
