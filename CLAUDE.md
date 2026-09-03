@@ -65,6 +65,33 @@ see [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
 Agents open PRs. Agents do not approve, merge, or force-push. Configuration lives in
 [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
 
+### One branch per task — a merged branch is deleted
+
+`delete_branch_on_merge` is **on**. The moment a pull request merges, its head branch is
+deleted on the remote, and every later merge is a rebase or a squash onto a branch that no
+longer has the old one behind it.
+
+So a branch is single-use. **Start every task by cutting a fresh branch from `dev`:**
+
+```bash
+git fetch origin --prune
+git checkout -b feature/<task> origin/dev
+```
+
+`--prune` matters: without it a deleted remote branch lingers in your clone as a stale
+`origin/*` ref, and the next `git log origin/dev..HEAD` measures against something that no
+longer exists.
+
+Never reuse a branch that has already merged, and never continue committing to a local copy of
+one. Its remote is gone, its commits are already on `dev`, and a push recreates a branch whose
+name says it was merged. If work continues on a topic, that is a new branch and a new pull
+request.
+
+Branch from `dev`, not from `main` — `dev` is the integration branch and is always at or ahead
+of `main`. Branch from another feature branch only when the work genuinely depends on unmerged
+work, and say so in the pull request, because the base has to merge first.
+
+
 **Verify before every push:**
 
 ```bash

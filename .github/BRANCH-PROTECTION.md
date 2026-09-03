@@ -148,7 +148,8 @@ branch anything else reads.
 - **Discussions:** optional; leave off until there is community volume to justify moderating it
 - **Wiki:** disabled — documentation lives in [`../docs/`](../docs/) and is reviewed
 - **Projects:** optional
-- **Auto-delete head branches on merge:** ✅
+- **Auto-delete head branches on merge:** ✅ — so a branch is single-use. Every task starts
+  from a fresh branch cut off `dev`; see [`../CLAUDE.md`](../CLAUDE.md) §2
 - **Allow merge commits:** ❌ / **Squash:** ✅ / **Rebase:** ✅ — keeps history linear
 - **Email address privacy:** see below — this is not currently satisfied
 
