@@ -157,6 +157,67 @@ describe.skipIf(noDatabase)("reporting and moderation", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("lets an account report a target again once the first report is closed", async () => {
+    // The other half of the duplicate rule, and the half that was missing. The
+    // unique indexes originally carried no status predicate, so "collapse a
+    // duplicate" was really "one report per account per target, ever": a
+    // reporter whose complaint was dismissed could never report that target
+    // again, not months later and not about something new. The insert hit
+    // onConflictDoNothing, the row was discarded, and they were told a
+    // moderator would look at it. Nobody would. Migration 0012 scopes both
+    // indexes to status = OPEN.
+    const listing = await product();
+    const reporter = await account();
+    const moderator = await account("MODERATOR");
+
+    const first = await fileReport({
+      ...deps(),
+      viewer: { userId: reporter },
+      targetType: "PRODUCT",
+      targetId: listing.id,
+      reason: "SPAM",
+      detail: null,
+    });
+    expect(first.created).toBe(true);
+
+    // While it is open the duplicate rule still holds — that part was right.
+    const whileOpen = await fileReport({
+      ...deps(),
+      viewer: { userId: reporter },
+      targetType: "PRODUCT",
+      targetId: listing.id,
+      reason: "SPAM",
+      detail: null,
+    });
+    expect(whileOpen.created).toBe(false);
+
+    await resolveReport({
+      ...deps(),
+      viewer: { userId: moderator },
+      reportId: first.id,
+      status: "DISMISSED",
+      note: "Reads as ordinary criticism.",
+    });
+
+    const afterClosing = await fileReport({
+      ...deps(),
+      viewer: { userId: reporter },
+      targetType: "PRODUCT",
+      targetId: listing.id,
+      reason: "HARASSMENT",
+      detail: "different problem, months later",
+    });
+
+    expect(afterClosing.created).toBe(true);
+    expect(afterClosing.id).not.toBe(first.id);
+
+    const rows = await db!
+      .select({ id: reports.id })
+      .from(reports)
+      .where(eq(reports.productId, listing.id));
+    expect(rows).toHaveLength(2);
+  });
+
   it("keeps two different accounts' reports on one target separate", async () => {
     // The half a naive "one report per target" rule would break. Five people
     // reporting the same comment is the signal the queue exists to surface.

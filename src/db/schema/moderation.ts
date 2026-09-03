@@ -103,18 +103,30 @@ export const reports = pgTable(
     index("reports_comment_idx").on(table.commentId),
 
     /**
-     * The duplicate rule (Phase 3 slice 3.3): one report per account per
-     * target. Two partial unique indexes rather than one over both columns,
+     * The duplicate rule (Phase 3 slice 3.3): one **open** report per account
+     * per target. Two partial unique indexes rather than one over both columns,
      * because Postgres treats NULLs in a unique index as distinct by default —
      * a single index would let one account file unlimited reports on one
      * product, each row differing only in a NULL nobody set.
+     *
+     * The `status = OPEN` predicate is the whole point of the second version
+     * of this index. Without it the rule was not "collapse duplicates" but
+     * "one report per account per target, ever". A reporter whose first report
+     * was dismissed could never report that target again — not months later,
+     * not with a new reason, not about something new the product had done. The
+     * insert hit `onConflictDoNothing`, the row was discarded, and they were
+     * told "Thanks — a moderator will look at this." Nobody would.
+     *
+     * Scoped to OPEN, concurrent reports on one live complaint still collapse
+     * into one queue entry, which is what the rule was for, and a closed
+     * verdict stops being permanent.
      */
     uniqueIndex("reports_reporter_product_key")
       .on(table.reporterId, table.productId)
-      .where(sql`${table.productId} IS NOT NULL`),
+      .where(sql`${table.productId} IS NOT NULL AND ${table.status} = 'OPEN'`),
     uniqueIndex("reports_reporter_comment_key")
       .on(table.reporterId, table.commentId)
-      .where(sql`${table.commentId} IS NOT NULL`),
+      .where(sql`${table.commentId} IS NOT NULL AND ${table.status} = 'OPEN'`),
 
     // Exactly one target, and the discriminator agrees with it.
     check(
