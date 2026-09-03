@@ -879,6 +879,19 @@ This is a labelling convention, not a constraint. It is deliberately not validat
 server-side signal distinguishes an honest judgement call from a wrong one, and rejecting a
 submission over a taxonomy opinion costs more than the misfiling does.
 
+**The submit form no longer defaults to Other.** The consequence above argues for keeping an
+overflow bucket so nothing has to be mislabelled, and that argument is about the choice being
+*available*, not about it being pre-selected. As the default it was an answer nobody gave: a
+founder who never opened the select filed under the junk drawer, and the stored row is then
+indistinguishable from a deliberate choice.
+
+The field stays optional — `createProduct` already accepts no category, and
+`tests/integration/category-taxonomy.test.ts` covers it. An uncategorised product still appears
+in `/products`, in search, and on its status page; it appears on no category page, which is
+accurate. Silence is recoverable by anyone who later knows the answer. A wrong answer that
+looks like an answer is not.
+
+
 ## ADR-027 — Category and status pages take no query parameters
 
 **Status:** Accepted

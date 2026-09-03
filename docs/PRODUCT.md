@@ -444,6 +444,11 @@ description; it is deliberately not validated server-side, because nothing there
 distinguish an honest judgement call from a wrong one, and refusing a submission over a taxonomy
 opinion costs more than the misfiling does.
 
+The form does not pre-select a category. Other remains a legitimate choice and is one keystroke
+away, but as a default it recorded an answer the founder never gave. The field is optional; a
+product with no category appears in `/products`, in search, and on its status page, and on no
+category page — which is accurate.
+
 ### ProductTag
 
 Flexible discovery labels. This is the free-form axis; Category is not.
