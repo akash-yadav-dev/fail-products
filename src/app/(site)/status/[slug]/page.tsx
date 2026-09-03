@@ -92,8 +92,16 @@ export default async function StatusPage({
           emptyDescription="No published listing carries this status right now."
         />
 
-        {page.items.length > 0 ? (
-          <div className="flex justify-center">
+        {/*
+          Only when the page is actually truncated. Offering to "browse every
+          listing" under a status holding three of them promised a fuller list
+          that does not exist, and nothing said this was a partial view.
+        */}
+        {page.truncated ? (
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Showing the newest {page.items.length}.
+            </p>
             <Button asChild variant="outline" className="h-11">
               <Link href={`/products?status=${status.slug}`}>
                 Browse and sort every {status.label.toLowerCase()} listing

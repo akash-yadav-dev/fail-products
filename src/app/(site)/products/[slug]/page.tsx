@@ -307,6 +307,15 @@ export default async function ProductPage({
                 // takes no query parameters (ADR-027), so page two would cost
                 // the cache; a listing that overflows this is the measurement
                 // that justifies paying for it (CLAUDE.md §7).
+                //
+                // The threshold, named so it is a decision rather than a
+                // surprise: **the first listing to render this sentence** is
+                // what forces comment pagination. The keyset already exists in
+                // CommentRepository; what it needs is a route that can carry a
+                // cursor without making this page dynamic — a `/products/
+                // [slug]/comments` sub-route, not a `?cursor=` here. Until
+                // then the thread genuinely dead-ends at this number,
+                // including for the founder it is about.
                 <p className="text-sm text-muted-foreground">
                   Showing the first {discussion.items.length} comments.
                 </p>
@@ -345,6 +354,25 @@ export default async function ProductPage({
                   <span className="text-muted-foreground">Status</span>
                   <StatusBadge status={product.failureStatus as FailureStatus} />
                 </div>
+
+                {/*
+                  Linked, not just stated. This page invested in getting the
+                  category right at submission and then showed the answer
+                  nowhere — and a category landing page with no inbound links
+                  from its own listings is a page search engines have little
+                  reason to rank.
+                */}
+                {product.categorySlug && product.categoryName ? (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-muted-foreground">Category</span>
+                    <Link
+                      href={`/categories/${product.categorySlug}`}
+                      className="rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      {product.categoryName}
+                    </Link>
+                  </div>
+                ) : null}
 
                 {outboundHost ? (
                   <div className="flex items-start justify-between gap-4">
