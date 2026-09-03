@@ -97,11 +97,24 @@ function asCountedRule(rule: RateLimitRule): CountedRule {
 }
 
 /**
- * Every counted limit the application enforces, in one place.
+ * Every counted limit the *community* surfaces enforce, in one place.
  *
  * `docs/SECURITY.md` §11 names the layer per endpoint; this is where the
  * numbers live, so a limit cannot be tuned in one call site and forgotten in
- * another. Windows stay well inside `MAX_RATE_LIMIT_WINDOW_SECONDS`.
+ * another.
+ *
+ * Not yet every limit in the application: the five auth limits are still inline
+ * literals in `services/auth/auth-service.ts` and `services/auth/server-auth.ts`,
+ * predating this table. They share the counter table and the same guarded sweep
+ * — `AuthRepository.consumeRateLimit` forwards to `RateLimitRepository` — so
+ * they are correct, just not declared here. Folding them in is a follow-up that
+ * touches the auth path and belongs in its own change.
+ *
+ * Windows must stay inside `MAX_RATE_LIMIT_WINDOW_SECONDS`, or the shared sweep
+ * deletes a live counter and the limit becomes bypassable via an unrelated
+ * endpoint. `tests/unit/services/security/rate-limit-rules.test.ts` pins that
+ * for the rules below; `RateLimitRepository.consume` enforces it at call time
+ * for every rule, including auth's.
  */
 export const RATE_LIMITS = {
   /**
