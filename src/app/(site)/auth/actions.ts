@@ -9,6 +9,7 @@ import {
   accountHintCookieOptions,
 } from "@/lib/auth/account-hint";
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from "@/lib/auth/session-cookie";
+import { safeNextPath } from "@/lib/urls/next-path";
 import {
 } from "@/services/auth/server-auth";
 import { requestEmailCode, verifyEmailCode, revokeSession } from "@/services/auth/server-auth";
@@ -65,7 +66,12 @@ export async function verifyCodeAction(
   // comment form to somebody who cannot use it; a hint missing after sign-in
   // hides one from somebody who can. Both are cosmetic, and both are avoidable.
   store.set(ACCOUNT_HINT_COOKIE, "1", accountHintCookieOptions());
-  redirect("/dashboard");
+  // Back to whatever the reader was doing, when the form carried a valid
+  // same-origin path. Somebody who clicked "sign in to comment" on a listing
+  // wanted that listing, not a dashboard. safeNextPath refuses anything that
+  // could leave the origin; an invalid value falls through to the default
+  // rather than erroring, because a bad next is not worth an error page.
+  redirect(safeNextPath(formData.get("next")) ?? "/dashboard");
 }
 
 export async function signOutAction(): Promise<void> {

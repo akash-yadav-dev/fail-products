@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Flag } from "lucide-react";
 import { useActionState, useState, useSyncExternalStore } from "react";
 
@@ -69,6 +70,12 @@ export function ReportDialog({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>("");
 
+  // Back to the page being reported, not to a dashboard. Re-validated by the
+  // action with safeNextPath, so this is a convenience rather than a trust
+  // boundary.
+  const pathname = usePathname();
+  const returnTo = `/auth/sign-in?next=${encodeURIComponent(pathname)}`;
+
   const signedIn = useSyncExternalStore(
     subscribeToNothing,
     readAccountHint,
@@ -105,7 +112,7 @@ export function ReportDialog({
             Reporting needs an account, so a report can be followed up and a
             pile-on can be spotted.{" "}
             <Link
-              href="/auth/sign-in"
+              href={returnTo}
               className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               Sign in

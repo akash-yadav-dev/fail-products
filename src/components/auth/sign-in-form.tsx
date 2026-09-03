@@ -13,7 +13,16 @@ const initialState: AuthActionState | null = null;
 
 type AuthAction = (state: AuthActionState | null, formData: FormData) => Promise<AuthActionState>;
 
-export function SignInForm({ requestAction: requestCode, verifyAction: verifyCode }: { requestAction: AuthAction; verifyAction: AuthAction }) {
+export function SignInForm({
+  requestAction: requestCode,
+  verifyAction: verifyCode,
+  next,
+}: {
+  requestAction: AuthAction;
+  verifyAction: AuthAction;
+  /** Validated same-origin path to return to after verification, if any. */
+  next?: string | null;
+}) {
   const [requestState, requestFormAction, requestPending] = useActionState(
     requestCode,
     initialState
@@ -33,6 +42,12 @@ export function SignInForm({ requestAction: requestCode, verifyAction: verifyCod
         </Alert>
         <form action={verifyFormAction} className="flex flex-col gap-4">
           <input type="hidden" name="email" value={email} />
+          {/*
+            Only on the verify form: that is the submission that redirects.
+            The action re-validates it, so this field being client-editable
+            changes nothing that matters.
+          */}
+          {next ? <input type="hidden" name="next" value={next} /> : null}
           <div className="flex flex-col gap-2">
             <Label htmlFor="code">One-time code</Label>
             <Input
