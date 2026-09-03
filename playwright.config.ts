@@ -39,6 +39,27 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["html"], ["github"]] : [["list"]],
+  /*
+   * Playwright's default is 5s, which is too tight for an assertion that waits
+   * on a Server Action here. A comment post authenticates, consumes a rate
+   * limit, inserts, and revalidates — four sequential round trips to a
+   * serverless Postgres over HTTP. Warm, that is roughly 260ms each. Cold, the
+   * first is 1.1-1.3s, because Neon suspends idle compute and the next query
+   * pays the resume.
+   *
+   * Measured, not guessed: five consecutive `select 1` calls after an idle
+   * period returned 1117, 1326, 264, 260, 258 ms.
+   *
+   * This surfaced as `comments.spec.ts` intermittently failing to find a posted
+   * comment while the button was still showing "Posting…" — the assertion gave
+   * up before the action had returned. Raising the ceiling does not slow a
+   * passing run: the assertion resolves as soon as the element appears, so this
+   * only changes how long a genuinely slow round trip is allowed to take before
+   * being called a failure.
+   *
+   * The same reasoning as `webServer.timeout` below, for the same cause.
+   */
+  expect: { timeout: 15_000 },
   use: {
     baseURL,
     trace: "on-first-retry",
