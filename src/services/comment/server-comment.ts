@@ -53,6 +53,9 @@ export function listComments(
   return listCommentsUseCase({ ...input, repository: repository() });
 }
 
-export function countComments(productId: string) {
-  return repository().countPublicForProduct(productId);
-}
+// Deleted: `countComments`. Nothing called it. The count it wraps
+// (`CommentRepository.countPublicForProduct`) is kept and still covered by
+// tests/integration/comment-visibility.test.ts, because it is the read a
+// comment count on a product card would need — but the binding is added back
+// when something renders one, not left standing in case it does. See
+// docs/PRODUCT.md §5 on why the count is not on a card today.

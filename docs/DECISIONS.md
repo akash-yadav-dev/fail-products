@@ -954,3 +954,86 @@ parameters that render a view, not a page.
 
 Any future public list must decide the same way: a crawlable surface takes no parameters, or
 it is not cacheable. That is the rule this ADR sets, not just the fix it applies.
+
+## ADR-028 — A deleted product must not take other people's moderation record with it
+
+**Status:** Accepted — the schema change lands with product deletion, not before
+**Date:** 2026-09-03
+
+Raised by the Phase 3 impact audit as F-IMP-1. Latent, not live: there is no `deleteProduct`
+and no `.delete(products)` anywhere in `src/`, and comments are never hard-deleted — moderation
+sets a state. This ADR exists because the decision is cheap now and a migration later.
+
+### The collision
+
+Two foreign keys chain:
+
+```
+comments.product_id                    ON DELETE cascade
+comment_status_history.comment_id      ON DELETE cascade
+```
+
+So deleting one product deletes every comment on it, and with them every moderation action ever
+taken on those comments — who hid what, when, and the reason they were required to record.
+
+`docs/LEGAL.md` §5 retains `comment_status_history` for **24 months** for "auditability,
+appeals". It separately commits to giving product owners deletion. Today those two promises
+contradict each other: a listing owner could delete their listing and erase the moderation
+record of *other people's* comments, including the record backing an appeal one of them had
+open.
+
+### Decision
+
+**The moderation record survives the content it is about.** When owner-initiated product
+deletion is built, it ships in the same commit as:
+
+- `comment_status_history.comment_id` becomes `ON DELETE set null` and nullable;
+- the comment id is additionally retained as a plain, unconstrained column, so a surviving row
+  still says which comment the action was about after the comment itself is gone.
+
+That is the shape `actor_id` already uses on the same table — `set null` on the reference, with
+`actor_role` retained beside it — so this is the existing pattern applied to a second column
+rather than a new one.
+
+Not implemented now. There is no code path that can delete a product, so a migration today
+would change a constraint that nothing can reach, and `AGENTS.md` forbids carrying structure in
+advance of a need. What is fixed now is the decision.
+
+### Why not the symmetrical rule
+
+`product_status_history.product_id` is deliberately `ON DELETE cascade`, and its comment says
+why: retaining a deleted listing's moderation records would keep personal data past its
+purpose. That reasoning is right and stays.
+
+The asymmetry is the point. A product's status history is a record *about the owner's own
+listing*, made by the owner and by moderators acting on it; when the owner exercises deletion,
+the purpose that justified keeping it ends. A comment's moderation history is a record about
+**a third party** — the commenter — and about a moderator's conduct toward them. The listing
+owner is not the data subject there, and their deletion request is not a reason to destroy
+someone else's appeal evidence.
+
+### Rejected alternatives
+
+- **Soft-delete products.** Cleaner in that nothing ever cascades, but it converts every
+  existing public query into one that must also exclude deleted rows, and the predicate that
+  ADR-013 centralises would have to grow a third state. It also does not actually satisfy a
+  deletion request: `LEGAL.md` requires real erasure, so a soft delete would need a hard delete
+  behind it anyway and the same question returns.
+- **Retain the whole comment.** Keeping the comment row so its history stays attached retains
+  far more personal data — the body, the author link — than auditability needs, and for
+  content whose product page no longer exists.
+- **Do nothing and accept the loss.** This is what the schema does today. It is only invisible
+  because the deletion path has not been written; the first time it is, it silently destroys
+  records `LEGAL.md` promises to hold for two years.
+
+### Consequences
+
+`comment_status_history` gains rows that outlive their comment, so any read of it must handle a
+null `comment_id`. `ReportRepository.listCommentHistory` is the only reader today.
+
+The 24-month retention in `LEGAL.md` §5 becomes enforceable rather than aspirational: it needs a
+prune job at that horizon, which does not exist yet and is named here so it is not discovered
+late. Until product deletion exists, nothing accumulates.
+
+Whoever implements product deletion is bound by this ADR and by the checklist above. A deletion
+PR that does not touch `comment_status_history` has not finished.

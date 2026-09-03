@@ -129,8 +129,15 @@ Suggested card content:
 Logo  Product name      Status
       One-line pitch
       Category · Last updated
-      Community comments · Referral signal
+      Community comments · Referral signal   <- not rendered
 ```
+
+The last row is not rendered, and that is a decision rather than an omission. Referral signals
+are Phase 4. Comment counts have had a table since Phase 3 and are still absent, because a
+count per card is an aggregate over `comments` on the hottest query in the application; the
+alternative is a denormalised counter on `products` kept correct through inserts, moderation
+changes and cascade deletes, which `CLAUDE.md` §7 requires a measurement to justify. Rendering
+"0 comments" on every card until then would describe the schema rather than the product.
 
 ## 8. Humor
 
