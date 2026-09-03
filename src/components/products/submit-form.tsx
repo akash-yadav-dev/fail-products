@@ -97,7 +97,17 @@ export function SubmitForm({ action }: { action: SubmitAction }) {
           Pick what the product was <em>for</em>, not how it was sold. Choose
           SaaS or Marketplace only when no other category fits.
         </p>
-        <Select name="categorySlug" defaultValue="other">
+        {/*
+          No defaultValue. "Other" is a legitimate answer and stays one keystroke
+          away, but as the default it was an answer nobody gave — a founder who
+          never opened the select filed under the junk drawer ADR-026 warns will
+          accumulate, and the row then reads like a decision. Leaving it unset
+          shows the placeholder and posts nothing, which the service already
+          accepts as no category (tests/integration/category-taxonomy.test.ts,
+          "allows no category at all"). Silence is recoverable; a wrong answer
+          that looks like an answer is not.
+        */}
+        <Select name="categorySlug">
           <SelectTrigger id="categorySlug" className="h-11">
             <SelectValue placeholder="What kind of product was it?" />
           </SelectTrigger>
