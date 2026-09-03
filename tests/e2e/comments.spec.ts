@@ -134,6 +134,33 @@ test.describe("comments", () => {
     await expect(page.getByText(body)).toBeVisible();
   });
 
+  test("says the comment posted, and empties the box behind it", async ({
+    page,
+    context,
+  }) => {
+    // The only feedback used to be the comment appearing after revalidation,
+    // which nothing announces: a screen-reader user pressed the primary
+    // button on this page and got silence. The action already returned
+    // "Posted." and the composer rendered only the failure branch, so that
+    // string was dead copy.
+    await signIn(context, session);
+    await page.goto(`/products/${seeded.slug}`);
+
+    const composer = page.getByLabel("Add a comment");
+    await composer.fill(`The export silently truncated. ${Date.now()}`);
+
+    // The counter is part of the hint paragraph while there is text in the box.
+    await expect(page.getByText(/of \d+ characters/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Post comment" }).click();
+
+    await expect(page.getByRole("status")).toContainText("Posted.");
+    await expect(composer).toHaveValue("");
+    // And the count goes with it. It used to keep the number from the comment
+    // that had already been posted.
+    await expect(page.getByText(/of \d+ characters/)).toHaveCount(0);
+  });
+
   test("survives a reload, and outlives the session that wrote it", async ({
     page,
     context,
