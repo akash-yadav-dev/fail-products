@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,10 @@ type SubmitAction = (
  */
 export function SubmitForm({ action }: { action: SubmitAction }) {
   const [state, formAction, pending] = useActionState(action, null);
+  // Only so the chosen category description can be shown below the trigger.
+  // The value still reaches the server through the select name, not from here.
+  const [categorySlug, setCategorySlug] = useState<string>("");
+  const chosenCategory = PRODUCT_CATEGORIES.find((c) => c.slug === categorySlug);
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -107,26 +111,31 @@ export function SubmitForm({ action }: { action: SubmitAction }) {
           "allows no category at all"). Silence is recoverable; a wrong answer
           that looks like an answer is not.
         */}
-        <Select name="categorySlug">
+        <Select name="categorySlug" value={categorySlug} onValueChange={setCategorySlug}>
           <SelectTrigger id="categorySlug" className="h-11">
             <SelectValue placeholder="What kind of product was it?" />
           </SelectTrigger>
           <SelectContent>
             {/*
-              The description, not the bare name. The list mixes domains,
-              audiences, and business models (ADR-026 amendment), so "SaaS" and
-              "AI" both fit an AI SaaS and the name alone cannot say which one
-              this form wants. The descriptions already existed in the domain
-              module and were not being shown. Same shape as the status select
-              above, deliberately.
+              The name only. Putting the description in the item also puts it in
+              the trigger, because SelectValue renders the chosen item children
+              and the trigger clamps to one line — so a founder who picked AI
+              saw "AI — Models, assistants, agen…", their own answer truncated
+              behind help text they had already read. The description belongs
+              below the trigger, which is what report-dialog.tsx does.
             */}
             {PRODUCT_CATEGORIES.map((category) => (
               <SelectItem key={category.slug} value={category.slug}>
-                {category.name} — {category.description}
+                {category.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {chosenCategory ? (
+          <p className="text-muted-foreground text-sm">
+            {chosenCategory.description}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

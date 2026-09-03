@@ -559,7 +559,13 @@ A non-logged-in visitor can:
 3. open product pages;
 4. click through to external websites;
 5. join a waitlist;
-6. report a product/comment.
+6. read a product's discussion.
+
+Reporting is **not** on that list. It needs an account, so that a moderator can follow a
+report up and so that several people reporting one thing can be told apart from one person
+reporting it repeatedly. A signed-out visitor sees the report control and is asked to sign in.
+Anyone with no account who needs something removed uses `/takedown`, which is a contact route
+rather than a queue entry.
 
 ## 14. Non-functional requirements
 
