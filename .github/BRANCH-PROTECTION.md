@@ -256,3 +256,35 @@ hygiene`, `Lint, typecheck, test, build`, `End-to-end` — because a required ch
 reports is indistinguishable from one that has not finished, and the pull request waits
 forever. Add it, then confirm with a throwaway pull request before relying on it.
 
+### Applying this — `scripts/apply-branch-protection.sh`
+
+The table above is a specification, and a specification nobody can execute drifts from reality
+the moment somebody changes one checkbox. The script applies it:
+
+```bash
+bash scripts/apply-branch-protection.sh --dry-run   # print what would change
+bash scripts/apply-branch-protection.sh             # apply
+```
+
+It sets both rulesets to `deletion`, `non_fast_forward`, `required_linear_history`,
+`required_status_checks` (the three job names, strict) and `pull_request` (1 approval, code-owner
+review, dismiss stale approvals, squash and rebase only), then sets the repository merge
+settings. It is idempotent — rerunning it is how the Measured state section stays green.
+
+Two things it deliberately does **not** do:
+
+- **It does not require signed commits.** Signing is not configured here, so requiring it would
+  make every pull request unmergeable, including the one that would configure signing.
+- **It does not touch account email privacy.** Those are account settings, not repository
+  settings, and no repository-scoped token can reach them. They remain a manual step.
+
+`allowed_merge_methods` drops `merge`. Every private-address leak in this repository's history
+came from a GitHub merge-button commit, which is authored with the account's primary address
+rather than the repo-local identity; squash and rebase merges do not create one. That narrows
+the leak surface — it is not the fix, and it does not undo the five commits already published.
+
+One caveat, learned by running it: the rulesets **list** endpoint returns every ruleset with
+`conditions: null`, so the target branch can only be read from each ruleset's own detail
+endpoint. Matching on the list silently finds nothing and reports the ruleset as missing.
+
+
