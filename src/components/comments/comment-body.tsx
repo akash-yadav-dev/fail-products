@@ -18,7 +18,11 @@ export function CommentBody({ body }: { body: string }) {
   const paragraphs = parseCommentRichText(body);
 
   return (
-    <div className="flex flex-col gap-3 text-sm text-foreground/90 text-pretty">
+    // wrap-anywhere: a comment is user input and an autolinked URL has no
+    // spaces to break at. Without it a single long link widens this column and
+    // scrolls the whole page sideways at 360px, which DESIGN.md treats as a
+    // first-class width. min-w-0 stops the flex parent refusing to shrink.
+    <div className="flex min-w-0 flex-col gap-3 text-sm text-foreground/90 text-pretty wrap-anywhere">
       {paragraphs.map((paragraph, paragraphIndex) => (
         <p key={paragraphIndex}>
           {paragraph.lines.map((line, lineIndex) => (

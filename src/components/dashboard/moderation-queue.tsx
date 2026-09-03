@@ -150,7 +150,7 @@ function QueueRow({
         </CardTitle>
 
         {entry.detail ? (
-          <CardDescription className="text-pretty">
+          <CardDescription className="text-pretty wrap-anywhere">
             {/*
               The reporter's own words, rendered as text. It is user input like
               any other, and it reaches a moderator through the same escaping
@@ -163,7 +163,10 @@ function QueueRow({
 
       <CardContent className="flex flex-col gap-4">
         {entry.targetType === "COMMENT" && entry.commentBody ? (
-          <blockquote className="border-l-2 pl-3 text-sm whitespace-pre-line text-muted-foreground">
+          // Same reason as the comment body: this is the reported text
+          // verbatim, so an unbroken URL would scroll the moderator queue
+          // sideways on a phone.
+          <blockquote className="border-l-2 pl-3 text-sm whitespace-pre-line text-muted-foreground wrap-anywhere">
             {entry.commentBody}
           </blockquote>
         ) : null}
