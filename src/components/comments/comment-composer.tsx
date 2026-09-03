@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useActionState, useState, useSyncExternalStore } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -47,6 +48,13 @@ export function CommentComposer({
   const [state, formAction, pending] = useActionState(action, null);
   const [length, setLength] = useState(0);
 
+  // Where to come back to after signing in. Sending a reader to /dashboard
+  // after they clicked "sign in to comment" on a listing loses both the page
+  // and anything they had typed. The action re-validates this with
+  // safeNextPath, so an odd pathname is refused there rather than trusted here.
+  const pathname = usePathname();
+  const returnTo = `/auth/sign-in?next=${encodeURIComponent(`${pathname}#discussion`)}`;
+
   // `useSyncExternalStore`, not an effect that calls setState. The cookie is an
   // external system this component reads, which is exactly what this hook is
   // for — and the server snapshot is `false`, so the prerendered HTML is the
@@ -63,7 +71,7 @@ export function CommentComposer({
         <p className="text-muted-foreground text-pretty">
           Comments are for signed-in accounts.{" "}
           <Link
-            href="/auth/sign-in"
+            href={returnTo}
             className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
             Sign in
