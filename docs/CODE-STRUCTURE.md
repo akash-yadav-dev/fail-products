@@ -79,6 +79,7 @@ failproducts/
 │   │   ├── comments/
 │   │   ├── waitlist/
 │   │   ├── dashboard/
+│   │   ├── security/            # Turnstile widget; cross-cutting, not a domain
 │   │   └── shared/
 │   │
 │   ├── domain/
@@ -90,7 +91,8 @@ failproducts/
 │   │   ├── moderation/
 │   │   └── referral/
 │   │
-│   ├── services/               # one directory per domain, not one file
+│   ├── services/               # one directory per domain, not one file —
+│   │                           # except security/, which is cross-cutting
 │   │   ├── auth/
 │   │   │   ├── auth-service.ts     # use cases; the repository is injected
 │   │   │   └── server-auth.ts      # binds them to getDb() for the app
@@ -99,6 +101,7 @@ failproducts/
 │   │   ├── comment/
 │   │   ├── waitlist/
 │   │   ├── moderation/
+│   │   ├── security/               # rate-limit, turnstile; used by several domains
 │   │   └── referral/
 │   │
 │   ├── repositories/
