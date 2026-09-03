@@ -19,9 +19,42 @@ runs:
   steps:
     # corepack ships with Node, so pnpm needs no third-party action and adds no
     # supply-chain surface. .github/BRANCH-PROTECTION.md
+    #
+    # `corepack enable` only writes shims; it downloads nothing. The download
+    # happens the first time a shim runs — which, with `cache: pnpm` below, is
+    # inside `actions/setup-node` when it calls `pnpm store path` to locate the
+    # cache directory. A network blip there fails the whole job before a single
+    # check has run, and it does not fail cleanly: corepack's fetch crashed the
+    # Node process outright with an undici assertion
+    # (`assert(!this.paused)` in `Parser.finish`) when the registry connection
+    # ended mid-response. That reads like a broken toolchain rather than a
+    # dropped packet, and it took a green run 30 minutes earlier to tell them
+    # apart.
+    #
+    # So the download is pulled forward into a step that owns it and can retry.
+    # By the time setup-node probes for the cache, pnpm is already in
+    # COREPACK_HOME and no network call is needed.
     - name: Enable pnpm
       shell: bash
-      run: corepack enable
+      env:
+        # Non-interactive: never pause for the "about to download" confirmation.
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      run: |
+        corepack enable
+
+        # The version comes from packageManager in package.json, so this stays
+        # correct without naming it twice.
+        for attempt in 1 2 3; do
+          if corepack prepare --activate; then
+            echo "pnpm $(pnpm --version) ready"
+            exit 0
+          fi
+          echo "::warning::corepack could not fetch pnpm (attempt $attempt of 3); retrying"
+          sleep $((attempt * 5))
+        done
+
+        echo "::error::corepack could not fetch pnpm after 3 attempts."
+        exit 1
 
     - name: Setup Node
       # actions/setup-node v6
