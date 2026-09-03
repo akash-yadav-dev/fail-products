@@ -31,8 +31,32 @@ export type RateLimitConsumption = {
   resetAt: number;
 };
 
+/**
+ * How often the sweep actually runs, as a fraction of calls.
+ *
+ * The sweep is time-based work — it deletes counters older than a fixed
+ * 24-hour horizon — but it used to be issued on every `consume()`, before the
+ * upsert. neon-http sends each statement as its own HTTPS request, so that
+ * doubled the round trips of every comment, every report, and every sign-in
+ * attempt to keep a bounded table tidy to a precision nothing needs.
+ *
+ * One call in a hundred still clears the table far faster than rows reach the
+ * horizon, and the sweep's correctness never depended on running often: it
+ * deletes what no live window can be using, so running it late deletes exactly
+ * the same rows.
+ */
+const SWEEP_SAMPLE_RATE = 0.01;
+
 export class RateLimitRepository {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    /**
+     * Whether this call should also sweep. Injectable so a test can force it
+     * either way rather than retrying until chance obliges.
+     */
+    private readonly shouldSweep: () => boolean = () =>
+      Math.random() < SWEEP_SAMPLE_RATE
+  ) {}
 
   /**
    * Counts one request against a limit and says whether it is allowed.
@@ -65,9 +89,11 @@ export class RateLimitRepository {
     );
     const expired = sql`${rateLimits.windowStartedAt} <= ${windowStart}`;
 
-    await this.db
-      .delete(rateLimits)
-      .where(sql`${rateLimits.updatedAt} <= ${sweepBefore}`);
+    if (this.shouldSweep()) {
+      await this.db
+        .delete(rateLimits)
+        .where(sql`${rateLimits.updatedAt} <= ${sweepBefore}`);
+    }
 
     const [row] = await this.db
       .insert(rateLimits)
