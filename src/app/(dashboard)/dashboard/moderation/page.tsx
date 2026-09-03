@@ -66,8 +66,17 @@ export default async function ModerationPage() {
         </div>
         <p className="max-w-prose text-sm text-muted-foreground text-pretty">
           Every action here is recorded with your account and the reason you
-          give. Nothing is removed automatically, and a decision taken in
-          error can be undone — that is what makes the record worth keeping.
+          give. Nothing is removed automatically. The record is what an appeal
+          is argued against, so write the reason for someone who was not here.
+          {/*
+            This used to promise that "a decision taken in error can be undone".
+            No control does that: the queue lists OPEN reports only, so an
+            actioned entry leaves this page and nothing else lists product
+            moderation. `canTransitionComment` allows the reverse move, but
+            nothing reaches it. Restoring is a real gap, not a copy problem —
+            the sentence is removed rather than reworded so the page stops
+            claiming a capability a moderator would go looking for and not find.
+          */}
         </p>
       </div>
 

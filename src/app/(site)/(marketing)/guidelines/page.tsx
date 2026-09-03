@@ -73,12 +73,35 @@ export default function GuidelinesPage() {
           </p>
         </section>
 
+        <section className="flex flex-col gap-3">
+          <h2 className="text-xl font-semibold tracking-tight">Reporting</h2>
+          <p className="max-w-prose text-muted-foreground text-pretty">
+            Every listing and every comment carries a report control. Reporting
+            needs an account, so that a moderator can follow a report up and so
+            that several people reporting the same thing can be told apart from
+            one person reporting it repeatedly.
+          </p>
+          <p className="max-w-prose text-muted-foreground text-pretty">
+            A report is a request for a person to look, not an automatic
+            takedown. Nothing is hidden or removed by reporting alone, and
+            reporting is not a way to make criticism of a product disappear —
+            a listing is not removed for being unflattering.
+          </p>
+          <p className="max-w-prose text-muted-foreground text-pretty">
+            You will not be told what was decided. A moderator records a reason
+            for every action they take, and that record is what an appeal is
+            argued against.
+          </p>
+        </section>
+
         <Alert>
-          <AlertTitle>Summary only</AlertTitle>
+          <AlertTitle>Appeals are not built yet</AlertTitle>
           <AlertDescription>
-            This page is a public summary. The full moderation policy, the
-            reporting flow, and the appeals process are still being written and
-            will be published before listings open.
+            Reporting works today. The appeals process does not have a form
+            yet — if something here affects you or your product, use the
+            takedown contact below and a person will read it. That is the whole
+            route for now, and this page will say so until there is a better
+            one.
           </AlertDescription>
         </Alert>
 
