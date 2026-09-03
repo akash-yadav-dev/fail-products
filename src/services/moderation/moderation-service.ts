@@ -11,6 +11,7 @@ import {
   type ReportStatus,
   type ReportTargetType,
 } from "@/domain/moderation/report";
+import type { FailureStatus } from "@/domain/product/failure-status";
 import {
   canTransitionModeration,
   type ModerationState,
@@ -312,6 +313,11 @@ export async function moderateProduct(input: {
     id: input.productId,
     moderationState: input.to,
     slug: product.slug,
+    // Returned so the action can invalidate the lists this listing appears
+    // on, not just its own page. Both are prerendered under ADR-027, so a
+    // removed listing keeps its card on them until they are revalidated.
+    categorySlug: product.categorySlug,
+    failureStatus: product.failureStatus as FailureStatus,
   };
 }
 
