@@ -273,6 +273,18 @@ export class ReportRepository {
    * against a record. This is that record for comments; products keep theirs in
    * `product_status_history`, on the timeline that also holds the owner's own
    * changes (ADR-013).
+   *
+   * Unindexed on purpose, for now. There is no WHERE clause and no index on
+   * `created_at` alone — the two that exist are `(comment_id, created_at)` and
+   * `(actor_id)` — so Postgres scans the table and top-N sorts. The output is
+   * bounded; the scan is not, and the table grows by one row per moderation
+   * action forever.
+   *
+   * The trigger, recorded so it is a decision rather than a discovery: add
+   * `comment_status_history_created_idx` on `created_at` when the table passes
+   * roughly a few thousand rows, or bound this query by date. Adding it today
+   * would be an index with no access pattern behind it, which is the
+   * mirror-image defect.
    */
   async listRecentActions(limit = 50) {
     return this.db
