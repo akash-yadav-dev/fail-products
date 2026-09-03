@@ -91,6 +91,17 @@ export function listOwnedProducts(ownerId: string) {
 }
 
 /**
+ * What a moderator recorded about each of this owner's listings, if anything.
+ *
+ * Read alongside the listings rather than joined into them: most owners have
+ * no moderation history at all, and this keeps the common case one plain
+ * query over `products`.
+ */
+export function listOwnedModerationNotices(ownerId: string) {
+  return repository().latestModerationByOwner(ownerId);
+}
+
+/**
  * One page of the public directory.
  *
  * The build guard lives here rather than in each page because every prerendered

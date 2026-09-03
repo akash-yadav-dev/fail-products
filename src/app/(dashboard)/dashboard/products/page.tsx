@@ -25,7 +25,10 @@ import { DashboardPageHeader } from "@/components/dashboard/dashboard-page-heade
 import { StatusBadge } from "@/components/products/status-badge";
 import type { FailureStatus } from "@/domain/product/failure-status";
 import { currentUserOrNull } from "@/services/auth/current-user";
-import { listOwnedProducts } from "@/services/product/server-product";
+import {
+  listOwnedModerationNotices,
+  listOwnedProducts,
+} from "@/services/product/server-product";
 
 export const metadata: Metadata = {
   title: "Your products",
@@ -40,15 +43,36 @@ const COLUMNS = [
   { key: "updated", label: "Updated", className: "hidden lg:table-cell" },
 ] as const;
 
-/** A published listing that is hidden or removed must say so to its owner. */
-function moderationNotice(state: string): string | null {
+/**
+ * A published listing that is flagged, hidden, or removed must say so to its
+ * owner — in terms, not as a one-word badge.
+ *
+ * The badge alone lived in a `hidden md:table-cell` column, so a founder on a
+ * phone whose listing had been taken down saw an ordinary row and a public
+ * 404. `docs/MODERATION.md` §10 requires a removal and appeal contact path,
+ * and a path nobody can find is not one.
+ */
+function moderationNotice(
+  state: string
+): { label: string; explanation: string } | null {
   switch (state) {
     case "FLAGGED":
-      return "Flagged";
+      return {
+        label: "Flagged",
+        explanation:
+          "A moderator is looking at this listing. It is still public.",
+      };
     case "HIDDEN":
-      return "Hidden";
+      return {
+        label: "Hidden",
+        explanation:
+          "This listing is not publicly visible while a moderator reviews it.",
+      };
     case "REMOVED":
-      return "Removed";
+      return {
+        label: "Removed",
+        explanation: "This listing has been taken down and is not public.",
+      };
     default:
       return null;
   }
@@ -56,7 +80,19 @@ function moderationNotice(state: string): string | null {
 
 export default async function DashboardProductsPage() {
   const user = await currentUserOrNull();
-  const items = user ? await listOwnedProducts(user.id) : [];
+
+  // Both reads in parallel: neon-http sends each statement as its own request,
+  // so sequencing them would cost a round trip for no reason.
+  const [items, notices] = user
+    ? await Promise.all([
+        listOwnedProducts(user.id),
+        listOwnedModerationNotices(user.id),
+      ])
+    : [[], []];
+
+  const noticeByProduct = new Map(
+    notices.map((entry) => [entry.productId, entry])
+  );
 
   return (
     <>
@@ -115,6 +151,7 @@ export default async function DashboardProductsPage() {
                 ) : (
                   items.map((item) => {
                     const notice = moderationNotice(item.moderationState);
+                    const record = noticeByProduct.get(item.id);
 
                     return (
                       <TableRow key={item.id}>
@@ -124,6 +161,52 @@ export default async function DashboardProductsPage() {
                             <span className="text-xs text-muted-foreground">
                               /products/{item.slug}
                             </span>
+
+                            {/*
+                              In the name cell, which is the one column that
+                              survives to 360px. What the moderator was
+                              required to record is shown to the person it is
+                              about, with the date and a route to object.
+                            */}
+                            {notice ? (
+                              <span className="mt-1 flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 text-xs font-normal">
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="secondary">
+                                    {notice.label}
+                                  </Badge>
+                                  {record ? (
+                                    <time
+                                      dateTime={record.createdAt.toISOString()}
+                                      className="text-muted-foreground"
+                                    >
+                                      {record.createdAt
+                                        .toISOString()
+                                        .slice(0, 10)}
+                                    </time>
+                                  ) : null}
+                                </span>
+
+                                <span className="text-muted-foreground text-pretty">
+                                  {notice.explanation}
+                                </span>
+
+                                {record?.reason ? (
+                                  // A moderator writes this, and a long
+                                  // unbroken string in it would widen the
+                                  // table on a phone.
+                                  <span className="wrap-anywhere text-muted-foreground">
+                                    Reason given: {record.reason}
+                                  </span>
+                                ) : null}
+
+                                <Link
+                                  href="/takedown"
+                                  className="w-fit rounded-sm font-medium underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                                >
+                                  Ask about this or appeal
+                                </Link>
+                              </span>
+                            ) : null}
                           </span>
                         </TableCell>
 
@@ -134,20 +217,15 @@ export default async function DashboardProductsPage() {
                         </TableCell>
 
                         <TableCell className="hidden md:table-cell">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline">
-                              {item.publicationState}
-                            </Badge>
-                            {/*
-                              A moderation state is never collapsed into the
-                              publication one (ADR-013): a listing can be
-                              published and flagged at the same time, and the
-                              owner has to be able to see both.
-                            */}
-                            {notice ? (
-                              <Badge variant="secondary">{notice}</Badge>
-                            ) : null}
-                          </span>
+                          {/*
+                            Publication only. A moderation state is still never
+                            collapsed into it (ADR-013) — the two are shown
+                            separately, and the moderation half moved to the
+                            name cell so it does not vanish with this column.
+                          */}
+                          <Badge variant="outline">
+                            {item.publicationState}
+                          </Badge>
                         </TableCell>
 
                         <TableCell className="hidden lg:table-cell text-muted-foreground">
