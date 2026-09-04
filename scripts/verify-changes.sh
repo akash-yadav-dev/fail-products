@@ -430,8 +430,18 @@ if [ -n "$COMMITS" ]; then
     fi
 
     if [ "$ae" != "$ALLOWED_EMAIL" ]; then
-      if [ "$IS_MERGE" -eq 1 ]; then MERGE_BADAUTH="$MERGE_BADAUTH $ref <$ae>"
-      else BADAUTH="$BADAUTH $ref <$ae>"; fi
+      # The short hash only, never the address.
+      #
+      # This output is printed into a public Actions log on every run, so an
+      # address echoed here is an address published -- by the very check whose
+      # job is to keep it out of the repository. CLAUDE.md 4 makes the same
+      # point about the rule itself: naming the addresses to block would
+      # publish them, which is exactly what the rule exists to prevent.
+      #
+      # The hash is enough to act on. Locally:
+      #   git log -1 --format='%ae' <hash>
+      if [ "$IS_MERGE" -eq 1 ]; then MERGE_BADAUTH="$MERGE_BADAUTH $ref"
+      else BADAUTH="$BADAUTH $ref"; fi
     fi
   done <<< "$COMMITS"
 
@@ -439,13 +449,13 @@ if [ -n "$COMMITS" ]; then
                       || note "  commit attribution     ok"
   [ -n "$NOSIGN" ] && fail "commit(s) missing DCO sign-off:$NOSIGN — use 'git commit -s'" \
                    || note "  DCO sign-off           ok"
-  [ -n "$BADAUTH" ] && fail "commit(s) with a non-allowlisted author:$BADAUTH" \
+  [ -n "$BADAUTH" ] && fail "commit(s) with a non-allowlisted author:$BADAUTH (see it with: git log -1 --format='%ae' <hash>)" \
                     || note "  commit author          ok"
 
   # Reported, never silent -- and never blocking, because nothing in a pull
   # request can change a commit that is already merged.
   [ -n "$MERGE_NOSIGN" ] && warn "merge commit(s) with no DCO sign-off, created by the merge button:$MERGE_NOSIGN"
-  [ -n "$MERGE_BADAUTH" ] && warn "merge commit(s) authored by the platform rather than the allowlisted address:$MERGE_BADAUTH -- set allow_merge_commit=false so no more are created, and turn on the account's email privacy. Existing ones cannot be changed without rewriting published history."
+  [ -n "$MERGE_BADAUTH" ] && warn "merge commit(s) authored by the platform rather than the allowlisted address:$MERGE_BADAUTH -- allow_merge_commit is off so no more are created. Existing ones cannot be changed without rewriting published history."
 fi
 
 # --- Hooks installed -------------------------------------------------------
