@@ -1,5 +1,5 @@
 // src/repositories/comment-repository.ts
-import { and, asc, count, eq, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import { publiclyVisibleComment } from "@/db/queries/comment-visibility";
@@ -95,6 +95,26 @@ export class CommentRepository {
     const hasMore = rows.length > options.limit;
 
     return { items: hasMore ? rows.slice(0, options.limit) : rows, hasMore };
+  }
+
+  /**
+   * Public comments across a set of listings, as one total.
+   *
+   * The owner's overview asks "how much discussion do my listings have", which
+   * is one number and one query. It is not the per-card count: that would be
+   * an aggregate on the hottest query in the application, and
+   * `docs/DESIGN.md` §7 records why it is not paid for yet.
+   */
+  async countPublicByProducts(productIds: readonly string[]): Promise<number> {
+    if (productIds.length === 0) return 0;
+
+    const [row] = await this.db
+      .select({ total: count() })
+      .from(comments)
+      .innerJoin(products, eq(comments.productId, products.id))
+      .where(and(inArray(comments.productId, [...productIds]), publiclyVisibleComment));
+
+    return row?.total ?? 0;
   }
 
   /** How many public comments a product has. Drives the heading and the sort. */

@@ -109,6 +109,32 @@ export class ReferralRepository {
       .limit(limit);
   }
 
+  /**
+   * Clicks per day summed across a set of listings, newest day first.
+   *
+   * The overview needs one series for the whole account, not one per listing,
+   * and summing in Postgres keeps it one round trip and one bounded result
+   * instead of a query per product.
+   *
+   * Reads the rollup, never `referral_events` -- which is the point of having
+   * a rollup. Raw rows only exist for the last 30 days, so a dashboard that
+   * counted them would quietly start reporting less as history aged out.
+   */
+  async dailyForProducts(productIds: readonly string[], days = 30) {
+    if (productIds.length === 0) return [];
+
+    return this.db
+      .select({
+        day: referralDaily.day,
+        clicks: sql<number>`sum(${referralDaily.clicks})::int`,
+      })
+      .from(referralDaily)
+      .where(inArray(referralDaily.productId, [...productIds]))
+      .groupBy(referralDaily.day)
+      .orderBy(desc(referralDaily.day))
+      .limit(days);
+  }
+
   /** Total clicks per listing for a set of products, read in one query. */
   async totalsByProduct(productIds: readonly string[]) {
     if (productIds.length === 0) return new Map<string, number>();
