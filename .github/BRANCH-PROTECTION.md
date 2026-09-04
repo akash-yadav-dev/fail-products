@@ -217,29 +217,47 @@ Then, on GitHub:
 The fourth row is the one to check first: if it is **not** mergeable, the bypass mode was left
 empty or set to something other than "For pull requests only", and every future PR will stall.
 
-### Measured state — 2026-09-02
+### Measured state — 2026-09-04
 
-Read from the API rather than assumed. Two rulesets exist and are **active**, one per branch,
-and both carry the same three rules:
+Read from the API rather than assumed, after `scripts/apply-branch-protection.sh` was run.
+Two rulesets exist and are **active**, one per branch, and both now carry five rules:
 
 | Rule | `main` | `dev` |
 |---|---|---|
 | `deletion` — restrict deletions | ✅ | ✅ |
 | `non_fast_forward` — block force pushes | ✅ | ✅ |
-| `pull_request` — 1 approval, code-owner review required | ✅ | ✅ |
+| `pull_request` — 1 approval, code-owner review, dismiss stale approvals, squash/rebase only | ✅ | ✅ |
+| `required_linear_history` | ✅ | ✅ |
+| `required_status_checks` — `Repository hygiene`, `Lint, typecheck, test, build`, `End-to-end` | ✅ | ✅ |
 
-Everything else this document specifies is **not configured**:
+Repository metadata now matches the specification too: `allow_merge_commit` is **false**,
+squash and rebase are the only merge methods, `delete_branch_on_merge` is on, and the wiki is
+disabled.
+
+**CI is a merge gate now.** That is a change in kind, not degree: a red pipeline stops a merge
+rather than merely embarrassing it, and the first thing it stopped was the `dev -> main`
+promotion pull request. Two consequences that were not obvious until it was switched on:
+
+- A check that fails for an environmental reason — an npm outage, a dropped packet — now blocks
+  a release. That is why the dependency audit distinguishes "found an advisory" from "could not
+  reach the advisory service" instead of reporting both as red.
+- A promotion pull request is measured over every commit `dev` has accumulated, including merge
+  commits the merge button authored before `allow_merge_commit` was turned off. Those cannot be
+  signed or re-authored without rewriting published history, so the gate reports them as a
+  warning rather than blocking a release nobody can unblock. A commit somebody actually wrote is
+  still a hard failure.
+
+Still not configured, and still worth knowing:
 
 | Promised above | Configured | Consequence while it is missing |
 |---|---|---|
-| Require status checks to pass | ❌ | **CI is not a merge gate.** A pull request can be merged with `Repository hygiene`, `Lint, typecheck, test, build`, or `End-to-end` red, and nothing stops it. Every guarantee in [`../docs/AI-VERIFICATION.md`](../docs/AI-VERIFICATION.md) rests on this rule existing |
-| Dismiss stale approvals on new commits | ❌ | An approval survives new work pushed onto the branch it approved |
-| Require linear history | ❌ | Merge commits are permitted — which is also why merge-button commits exist at all; see the email section above |
-| Require signed commits | ❌ | Documented as "recommended once commit signing is configured"; signing is not configured |
-| Restrict merges to `dev` only (on `main`) | ❌ | A feature branch can open a pull request straight into `main` and skip integration entirely. This is the row described above as "the one that makes the promotion path real rather than a convention" |
+| Require signed commits | ❌ | Deliberate. Signing is not set up here, and requiring it would make every pull request unmergeable — including the one that would configure signing |
+| Restrict merges to `dev` only (on `main`) | ❌ | A feature branch can still open a pull request straight into `main` and skip integration. GitHub rulesets cannot express "only from this branch", so this stays a convention enforced by review |
 
-Repository-level settings also differ from [Repository metadata](#repository-metadata):
-`allow_merge_commit` is **true** (specified ❌) and the wiki is **enabled** (specified disabled).
+The private-address leak in existing history is unchanged by any of this: five merge commits
+carry the account's primary address, two of them reachable from `main`. Turning
+`allow_merge_commit` off stops new ones. It does not remove the published ones, and only a
+history rewrite would — which is the owner's decision, not a gate's.
 
 To read the same thing back at any time:
 
