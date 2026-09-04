@@ -198,6 +198,56 @@ else
 fi
 
 echo
+echo "MERGE COMMITS"
+#
+# The distinction this suite exists to pin: a commit somebody wrote must still
+# be signed off and correctly authored, and a merge commit the platform wrote
+# must not block a promotion pull request over an author nobody can change.
+#
+# Without the second half, `dev -> main` is permanently red: it contains every
+# merge commit `dev` has ever accumulated, and a force-push to a protected
+# branch is the only thing that could remove one.
+
+FOREIGN_EMAIL="someone@example.invalid"
+
+# A plain commit with a foreign author is still a hard failure.
+git checkout -q -B merge-guard baseline 2>/dev/null; git clean -qfd 2>/dev/null
+echo "//x" >> src/domain/product/slug.ts
+git add -A >/dev/null 2>&1
+git -c user.email="$FOREIGN_EMAIL" commit -q -s -m "test: foreign author" --no-verify >/dev/null 2>&1
+out="$(bash scripts/verify-changes.sh --range baseline..HEAD 2>&1)"; code=$?
+if printf '%s' "$out" | grep -qF "non-allowlisted author" && [ "$code" -ne 0 ]; then
+  echo "  PASS  ordinary commit with a foreign author still blocks"; PASS=$((PASS+1))
+else
+  echo "  FAIL  foreign author on an ordinary commit no longer blocks (exit $code)"; FAIL=$((FAIL+1))
+fi
+
+# A merge commit with the same foreign author and no sign-off warns instead.
+git checkout -q -B merge-side baseline 2>/dev/null; git clean -qfd 2>/dev/null
+echo "//side" >> src/domain/product/slug.ts
+git add -A >/dev/null 2>&1
+git commit -q -s -m "test: side branch work" --no-verify >/dev/null 2>&1
+
+git checkout -q -B merge-target baseline 2>/dev/null; git clean -qfd 2>/dev/null
+echo "//target" >> src/lib/urls/external.ts
+git add -A >/dev/null 2>&1
+git commit -q -s -m "test: target branch work" --no-verify >/dev/null 2>&1
+
+# No -s and a foreign identity: exactly what the merge button produces.
+git -c user.email="$FOREIGN_EMAIL" merge --no-ff --no-verify \
+    -m "Merge pull request #1 from example/side" merge-side >/dev/null 2>&1
+
+out="$(bash scripts/verify-changes.sh --range baseline..HEAD 2>&1)"; code=$?
+if printf '%s' "$out" | grep -qF "authored by the platform" \
+   && ! printf '%s' "$out" | grep -qF "non-allowlisted author" \
+   && [ "$code" -eq 0 ]; then
+  echo "  PASS  platform merge commit warns without blocking"; PASS=$((PASS+1))
+else
+  echo "  FAIL  platform merge commit mishandled (exit $code)"; FAIL=$((FAIL+1))
+  printf '%s\n' "$out" | sed 's/^/        | /' | head -20
+fi
+
+echo
 echo "======================================"
 printf '  PASS: %d   FAIL: %d\n' "$PASS" "$FAIL"
 echo "======================================"
