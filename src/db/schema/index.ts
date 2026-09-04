@@ -14,3 +14,4 @@ export * from "@/db/schema/products";
 export * from "@/db/schema/security";
 export * from "@/db/schema/taxonomy";
 export * from "@/db/schema/users";
+export * from "@/db/schema/waitlists";

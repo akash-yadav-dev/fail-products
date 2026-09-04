@@ -117,7 +117,9 @@ Any migration that introduces a new personal-data column must add a row here in 
 | Moderation actions (`comment_status_history`) | actor anonymised on deletion, action retained | 24 months | auditability, appeals |
 | `product_status_history` | subject anonymised, transitions retained | indefinite | the recovery timeline is the product |
 | Waitlist entries | erased on request by the subscriber | until product deletion or unsubscribe | consent-based |
+| Waitlist consent record (timestamp + wording) | erased with the entry | with the entry | the lawful basis for the entry; useless without it |
 | Waitlist CSV exports | not retained server-side | not stored | generated on demand only |
+| Waitlist export log (`waitlist_exports`) | actor anonymised, record retained | 12 months | who took a subscriber list, and when (`SECURITY.md` §11) |
 | `referral_events` (raw) | not personal if no IP stored | **30 days**, then rolled up | volume control on a 0.5 GB database |
 | Referral daily aggregates | no personal data | indefinite | analytics |
 | Security/audit logs | pseudonymised | 12 months | incident response |

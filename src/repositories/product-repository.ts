@@ -51,6 +51,10 @@ const ownerColumns = {
   ownerId: products.ownerId,
   publicationState: products.publicationState,
   moderationState: products.moderationState,
+  // The owner's own switch. Not in `publicColumns`: the public page derives
+  // whether to render the form from the listing it already loaded, and a
+  // visitor has no use for the flag on any other listing.
+  waitlistEnabled: products.waitlistEnabled,
 } as const;
 
 /**
@@ -148,6 +152,9 @@ export class ProductRepository {
         // likely to rank, and a reader wanting "more like this" had no route.
         categorySlug: categories.slug,
         categoryName: categories.name,
+        // Decides whether the page renders a join form. Read here rather than
+        // in a second query because the page has already paid for this row.
+        waitlistEnabled: products.waitlistEnabled,
       })
       .from(products)
       .leftJoin(users, eq(products.ownerId, users.id))
@@ -519,6 +526,23 @@ export class ProductRepository {
       ) SELECT id, slug FROM created
     `);
     return result.rows[0] ?? null;
+  }
+
+  /**
+   * Turns a product's waitlist on or off.
+   *
+   * Its own method rather than a field on `updateDetails`, because the two are
+   * different actions with different consequences: editing a tagline changes
+   * what a page says, and this changes whether the page starts collecting
+   * strangers' email addresses. Folding it in would make the switch reachable
+   * from any form that happens to post the field.
+   */
+  setWaitlistEnabled(productId: string, enabled: boolean) {
+    return this.db
+      .update(products)
+      .set({ waitlistEnabled: enabled, updatedAt: sql`now()` })
+      .where(eq(products.id, productId))
+      .returning({ id: products.id, slug: products.slug });
   }
 
   updateDetails(

@@ -1,6 +1,7 @@
 // src/db/schema/products.ts
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   customType,
   index,
@@ -85,6 +86,23 @@ export const products = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+
+    /**
+     * Whether the public page invites visitors to join a waitlist
+     * (`docs/PRODUCT.md` §5.1 — "optional waitlist enabled").
+     *
+     * Owner-controlled, and **off by default**. Collecting a stranger's email
+     * address is something a founder opts into, not something a listing starts
+     * doing because it was created; a default of true would turn every
+     * pre-existing listing into a collection point the owner never asked for.
+     *
+     * Turning it off stops new signups and nothing else. Addresses already
+     * given are still held under the consent they were given under, and are
+     * still exportable and still erasable — the toggle is not a deletion, and
+     * treating it as one would silently destroy a founder's list the first time
+     * they experimented with the switch.
+     */
+    waitlistEnabled: boolean("waitlist_enabled").notNull().default(false),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),

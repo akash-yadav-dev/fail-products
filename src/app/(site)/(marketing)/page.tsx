@@ -155,9 +155,10 @@ export default function HomePage() {
           <Alert className="mt-8">
             <AlertTitle>This is the skeleton, not the product</AlertTitle>
             <AlertDescription>
-              Layout, navigation, theming, and routes are in place. Listings,
-              accounts, comments, and waitlists are not built yet, so every
-              page below renders an empty state rather than sample data.
+              Layout, navigation, theming, and routes are in place, and so are
+              listings, accounts, comments, and waitlists. Referral tracking and
+              the creator dashboard are not, so parts of this site still render
+              an empty state rather than real numbers.
             </AlertDescription>
           </Alert>
         </Container>

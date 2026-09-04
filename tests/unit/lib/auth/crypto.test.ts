@@ -4,18 +4,14 @@ import {
   constantTimeEqual,
   generateOtp,
   generateSessionToken,
-  isValidEmail,
-  normalizeEmail,
   sha256Base64Url,
 } from "@/lib/auth/crypto";
 
-describe("passwordless authentication primitives", () => {
-  it("normalizes and validates email addresses at the boundary", () => {
-    expect(normalizeEmail("  Founder@Example.test ")).toBe("founder@example.test");
-    expect(isValidEmail("founder@example.test")).toBe(true);
-    expect(isValidEmail("not-an-email")).toBe(false);
-  });
+// Email normalisation and validation moved to `lib/validation/email.ts` when
+// the waitlist became a second caller; their tests moved with them, to
+// tests/unit/lib/validation/email.test.ts.
 
+describe("passwordless authentication primitives", () => {
   it("generates six-digit OTPs", () => {
     const code = generateOtp();
     expect(code).toMatch(/^\d{6}$/);

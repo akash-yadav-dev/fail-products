@@ -219,9 +219,22 @@ Minimum fields:
 - product;
 - consent/terms acknowledgement.
 
+Signup is **double opt-in** (ADR-029). A new entry is pending; FailProducts sends one
+confirmation email, and the address joins the list only when that link is followed. A pending
+address receives nothing else and never appears in an export. Every waitlist email carries a
+removal link, and removal erases the entry rather than flagging it (`LEGAL.md` §5).
+
+The consent record — the timestamp and the exact wording agreed to — is stored with the entry
+and is required. It is the lawful basis for every later email, not metadata about the row.
+
+The waitlist is off by default and the owner switches it on per product. Switching it off stops
+new signups and deletes nothing: addresses already given were given under a consent nobody
+withdrew.
+
 Waitlist emails must be sent through ZeptoMail.
 
-The creator should be able to export waitlist data as CSV.
+The creator should be able to export waitlist data as CSV. The export is owner-only — a
+moderator cannot take it — and every download is recorded (`SECURITY.md` §11).
 
 #### Referral tracking
 
@@ -487,7 +500,17 @@ rejected, and the reporter is told the same thing either way.
 
 ### WaitlistEntry
 
-Email captured for a product waitlist.
+Email captured for a product waitlist, with the consent that makes it lawful to write to:
+a timestamp and the exact wording agreed to, both required by the database rather than by
+convention. One entry per address per product, so joining twice is a no-op rather than a second
+row. Pending until the confirmation link is followed (ADR-029), and erased — never flagged — on
+request.
+
+### WaitlistExport
+
+A record that somebody downloaded a product's subscriber list: product, actor, row count, time.
+No subscriber data. `SECURITY.md` §11 requires it because the export is the one request that
+releases bulk personal data, and "who took the list" is the question asked afterwards.
 
 ### ReferralEvent
 

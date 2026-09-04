@@ -1,5 +1,6 @@
 import type { AuthRepository } from "@/repositories/auth-repository";
-import { constantTimeEqual, generateOtp, generateSessionToken, isValidEmail, normalizeEmail, sha256Base64Url } from "@/lib/auth/crypto";
+import { constantTimeEqual, generateOtp, generateSessionToken, sha256Base64Url } from "@/lib/auth/crypto";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/email";
 import { consumeDatabaseLimit } from "@/services/auth/rate-limit";
 
 export const OTP_TTL_SECONDS = 10 * 60;
