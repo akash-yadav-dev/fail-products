@@ -16,6 +16,8 @@ import {
   TURNSTILE_FIELD,
   verifyTurnstile,
 } from "@/services/security/turnstile";
+import { WaitlistError } from "@/services/waitlist/waitlist-service";
+import { joinWaitlist } from "@/services/waitlist/server-waitlist";
 
 /**
  * Posts a comment on a product.
@@ -43,7 +45,8 @@ export async function postCommentAction(
   if (!challenge.ok) {
     return {
       ok: false,
-      message: "That check did not complete. Reload the page and try again.",
+      message:
+        "The spam check did not finish. Try again — what you wrote is still here.",
     };
   }
 
@@ -122,7 +125,8 @@ export async function reportAction(
   if (!challenge.ok) {
     return {
       ok: false,
-      message: "That check did not complete. Reload the page and try again.",
+      message:
+        "The spam check did not finish. Try again — what you wrote is still here.",
     };
   }
 
@@ -166,6 +170,80 @@ function reportMessageFor(error: ModerationError): string {
       return "That is no longer here.";
     default:
       return "Could not send that report. Try again.";
+  }
+}
+
+/**
+ * Joins a product's waitlist (Phase 4 slice 4.1).
+ *
+ * The one mutation on this page that a **signed-out** visitor performs, which
+ * is what `docs/PRODUCT.md` §13 requires — "a non-logged-in visitor can join a
+ * waitlist". So there is no session to authorise against and no account to
+ * count a rate limit on: the address and the connecting IP are what the limits
+ * are counted against, and Turnstile carries the weight a session would.
+ *
+ * Nothing is revalidated afterwards. Joining changes no rendered output — the
+ * page shows the same form to the next visitor, and telling one visitor that
+ * another has joined would be a disclosure, not a feature. Invalidating
+ * `/products/[slug]` here would spend the cache ADR-027 exists to protect for
+ * no visible change.
+ */
+export async function joinWaitlistAction(
+  _previous: FormActionState | null,
+  formData: FormData
+): Promise<FormActionState> {
+  const ipAddress = await requestIpAddress();
+
+  const challenge = await verifyTurnstile(
+    formData.get(TURNSTILE_FIELD),
+    "waitlist",
+    ipAddress
+  );
+  if (!challenge.ok) {
+    return {
+      ok: false,
+      message: "That check did not complete. Reload the page and try again.",
+    };
+  }
+
+  try {
+    await joinWaitlist({
+      productId: String(formData.get("productId") ?? ""),
+      email: formData.get("email"),
+      consent: formData.get("consent"),
+      ipAddress,
+    });
+
+    // Deliberately the same answer for a new signup, a repeat, and an address
+    // already confirmed. A form that says "you are already on this list" is an
+    // oracle for whether a named person subscribed to a named product.
+    return {
+      ok: true,
+      message:
+        "Check your inbox — open the link in that email to confirm your place. Nothing is sent until you do.",
+    };
+  } catch (error) {
+    if (error instanceof WaitlistError) {
+      return { ok: false, message: waitlistMessageFor(error) };
+    }
+    return { ok: false, message: "Could not add you to that list. Try again." };
+  }
+}
+
+function waitlistMessageFor(error: WaitlistError): string {
+  switch (error.code) {
+    case "INVALID_EMAIL":
+      return "That does not look like an email address.";
+    case "CONSENT_REQUIRED":
+      return "Tick the box to say you agree to be emailed about this product.";
+    case "RATE_LIMITED":
+      return `That is a lot of signups from here. Try again ${relativeTime(error.resetAt)}.`;
+    case "PRODUCT_NOT_FOUND":
+      // The same answer for "no such product" and "its waitlist is off", so
+      // this form cannot be used to probe for hidden or draft listings.
+      return "That listing is not taking signups.";
+    default:
+      return "Could not add you to that list. Try again.";
   }
 }
 

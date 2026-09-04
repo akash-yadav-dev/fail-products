@@ -1,4 +1,10 @@
-/** Web-Crypto-only primitives for passwordless authentication. */
+/**
+ * Web-Crypto-only primitives for passwordless authentication.
+ *
+ * Email normalisation and validation used to live here. They are not crypto and
+ * they are not auth-specific — the waitlist takes an address from a stranger
+ * too — so they moved to `src/lib/validation/email.ts` beside the URL rules.
+ */
 
 const TOKEN_BYTES = 32;
 const OTP_LENGTH = 6;
@@ -7,14 +13,6 @@ function encodeBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function isValidEmail(email: string): boolean {
-  return email.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export function generateSessionToken(): string {

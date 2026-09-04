@@ -11,6 +11,8 @@ export * from "@/db/schema/auth";
 export * from "@/db/schema/comments";
 export * from "@/db/schema/moderation";
 export * from "@/db/schema/products";
+export * from "@/db/schema/referrals";
 export * from "@/db/schema/security";
 export * from "@/db/schema/taxonomy";
 export * from "@/db/schema/users";
+export * from "@/db/schema/waitlists";

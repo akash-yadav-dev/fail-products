@@ -188,18 +188,31 @@ Minimum coverage:
 | product submission | `ratelimit` binding, per user |
 | comment posting | DB counter, per user — see below |
 | reports | DB counter, per user + Turnstile — see below |
-| waitlist signup | `ratelimit` binding + Turnstile |
+| waitlist signup | DB counter, per email **and** per IP, + Turnstile — see below |
 | image upload initiation | `ratelimit` binding, per user |
 | search | WAF + `ratelimit` binding |
 | waitlist CSV export | DB counter — bulk PII, also audit-logged |
 
-**Comment posting and reporting use the DB counter, not the binding.** The Workers
-`ratelimit` binding is what those two endpoints should eventually use, and the table above named
-it first. Nothing is deployed to Workers yet, so there is no binding to call and the real choice
-is the counted layer or no limit at all. Counted is the stricter of the two, the request already
-writes a row, and moving a rule back to the edge layer is a one-line change to
+**Comment posting, reporting, and waitlist signup use the DB counter, not the binding.** The
+Workers `ratelimit` binding is what those three endpoints should eventually use, and the table
+above named it first. Nothing is deployed to Workers yet, so there is no binding to call and the
+real choice is the counted layer or no limit at all. Counted is the stricter of the two, the
+request already writes a row, and moving a rule back to the edge layer is a one-line change to
 `RATE_LIMITS` in `src/services/security/rate-limit.ts`. Shipping the weaker option would have
 meant shipping none.
+
+**Waitlist signup is counted per email and per IP, the same pair as sign-in**, because it is the
+one public endpoint that causes email to be sent to an address the caller chose. The per-address
+limit bounds how often one mailbox can be mailed; the per-IP limit bounds how many mailboxes one
+machine can reach, which is the shape of abuse that gets a sending domain blocklisted. Double
+opt-in (ADR-029) is what bounds the consequence rather than the rate: the worst an attacker
+achieves is one email to the victim saying nothing further will be sent.
+
+**The waitlist CSV export is audit-logged in `waitlist_exports`** — product, actor, row count,
+time. No subscriber data, and the CSV itself is never retained (`LEGAL.md` §5). The record is
+written when the last row has been streamed, so an abandoned download is not filed as a
+completed export. It is the one endpoint that releases bulk personal data in a single request,
+which is why it gets both an accurate global count and a record of who called it.
 
 Every counted limit shares one table, `rate_limits`, with the rule name inside the hashed key so
 two limits can never share a counter. That sharing has one hazard worth naming: a sweep of
@@ -212,13 +225,13 @@ Turnstile should be applied selectively to public/high-abuse endpoints. Its toke
 **verified server-side** against the siteverify endpoint and treated as single-use; a token
 validated only in the browser is not a control at all.
 
-Turnstile is active on comment posting and reporting. It is enabled **only when both keys are
-configured**, and a deployment without them fails to start rather than serving the forms
-unprotected — a bot control that silently switches itself off is worse than none, because
-nothing reports it. A local build and CI run with it off, which is why the rejection path is
-covered by tests rather than by the presence of the widget. Each widget declares an action name
-that is re-checked at verification, so a token minted on the comment form cannot be replayed
-against the report form.
+Turnstile is active on comment posting, reporting, and waitlist signup. It is enabled **only
+when both keys are configured**, and a deployment without them fails to start rather than
+serving the forms unprotected — a bot control that silently switches itself off is worse than
+none, because nothing reports it. A local build and CI run with it off, which is why the
+rejection path is covered by tests rather than by the presence of the widget. Each widget
+declares an action name that is re-checked at verification, so a token minted on the comment
+form cannot be replayed against the report form or the waitlist form.
 
 The rate limiter sits behind an interface in `lib/security/` so the Cloudflare-specific parts
 stay replaceable, per the portability rule in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §13.

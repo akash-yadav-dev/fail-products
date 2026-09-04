@@ -1,5 +1,5 @@
 // src/repositories/comment-repository.ts
-import { and, asc, count, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import { publiclyVisibleComment } from "@/db/queries/comment-visibility";
@@ -54,6 +54,15 @@ export class CommentRepository {
    * comments posted in the same second are ordinary, and a tie straddling a
    * page boundary is where offset pagination drops or repeats a row.
    */
+  // The `after` branch below is written as `created_at > X OR (created_at = X
+  // AND id > Y)`. That is not a single index range scan, and
+  // `comments_product_created_idx` is `(product_id, created_at)` without `id`,
+  // so the tiebreak needs a sort the index cannot supply. It is unreachable
+  // today — `listComments` never passes `after` — which is why it is recorded
+  // rather than fixed: an index change with no live query behind it cannot be
+  // measured. When comment pagination ships, the predicate becomes the
+  // row-value form `(created_at, id) > (X, Y)` and the index extends to
+  // `(product_id, created_at, id)`, in that same commit.
   async listPublicForProduct(
     productId: string,
     options: { limit: number; after?: { createdAt: Date; id: string } | null }
@@ -86,6 +95,26 @@ export class CommentRepository {
     const hasMore = rows.length > options.limit;
 
     return { items: hasMore ? rows.slice(0, options.limit) : rows, hasMore };
+  }
+
+  /**
+   * Public comments across a set of listings, as one total.
+   *
+   * The owner's overview asks "how much discussion do my listings have", which
+   * is one number and one query. It is not the per-card count: that would be
+   * an aggregate on the hottest query in the application, and
+   * `docs/DESIGN.md` §7 records why it is not paid for yet.
+   */
+  async countPublicByProducts(productIds: readonly string[]): Promise<number> {
+    if (productIds.length === 0) return 0;
+
+    const [row] = await this.db
+      .select({ total: count() })
+      .from(comments)
+      .innerJoin(products, eq(comments.productId, products.id))
+      .where(and(inArray(comments.productId, [...productIds]), publiclyVisibleComment));
+
+    return row?.total ?? 0;
   }
 
   /** How many public comments a product has. Drives the heading and the sort. */
@@ -172,31 +201,12 @@ export class CommentRepository {
       .where(eq(comments.id, id));
   }
 
-  /**
-   * The moderation queue's view: every comment in a given state, newest first.
-   *
-   * Unfiltered by product visibility on purpose — a comment on a listing that
-   * was hidden is exactly the kind a moderator still has to be able to reach.
-   */
-  async listByModerationState(
-    state: CommentModerationState,
-    limit: number
-  ) {
-    return this.db
-      .select({
-        id: comments.id,
-        body: comments.body,
-        createdAt: comments.createdAt,
-        moderationState: comments.moderationState,
-        productSlug: products.slug,
-        productName: products.name,
-        authorUsername: users.username,
-      })
-      .from(comments)
-      .innerJoin(products, eq(comments.productId, products.id))
-      .leftJoin(users, eq(comments.authorId, users.id))
-      .where(eq(comments.moderationState, state))
-      .orderBy(desc(comments.createdAt))
-      .limit(limit);
-  }
+  // Deleted: `listByModerationState`. It shipped with Phase 3 and never had a
+  // caller — the queue reads `reports`, not comments by state — and it
+  // filtered `comments.moderation_state`, which carries no index, so the
+  // first code to wire it up would have got a sequential scan of the comments
+  // table for free. Adding the index now instead would be the mirror-image
+  // defect: an index with no access pattern behind it. When a moderator view
+  // of comments by state is actually built, it arrives with its own index in
+  // the same commit.
 }

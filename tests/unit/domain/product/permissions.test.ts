@@ -69,6 +69,37 @@ describe("owner-only verbs", () => {
   );
 });
 
+describe("export_waitlist", () => {
+  // The parameterised block above already covers this verb, because it derives
+  // from PRODUCT_VERBS. These are stated separately anyway: this is the one
+  // verb that releases *other people's* personal data, and a rule that is only
+  // asserted by a `filter()` is a rule nobody reading the file will notice
+  // changed.
+
+  it("allows the owner", () => {
+    expect(can(owner, "export_waitlist", product())).toBe(true);
+  });
+
+  it("refuses a moderator", () => {
+    // docs/SECURITY.md §11 and docs/LEGAL.md §5: subscribers consented to hear
+    // from this founder and from nobody else. Moderation is a content power,
+    // not a reason to hold a list of strangers' addresses.
+    expect(can(moderator, "export_waitlist", product())).toBe(false);
+  });
+
+  it("refuses a signed-out visitor", () => {
+    expect(can(anonymous, "export_waitlist", product())).toBe(false);
+  });
+
+  it("stays owner-only on a listing that is not public", () => {
+    // A draft or hidden listing may still hold addresses from when it was
+    // public. Who may take them does not change with its publication state.
+    const hidden = product({ moderationState: "HIDDEN" });
+    expect(can(owner, "export_waitlist", hidden)).toBe(true);
+    expect(can(stranger, "export_waitlist", hidden)).toBe(false);
+  });
+});
+
 describe("moderate", () => {
   it("allows a moderator", () => {
     expect(can(moderator, "moderate", product())).toBe(true);

@@ -50,6 +50,10 @@ const ownerColumns = {
   ownerId: products.ownerId,
   publicationState: products.publicationState,
   moderationState: products.moderationState,
+  // The owner's own switch. Not in `publicColumns`: the public page derives
+  // whether to render the form from the listing it already loaded, and a
+  // visitor has no use for the flag on any other listing.
+  waitlistEnabled: products.waitlistEnabled,
 } as const;
 
 /**
@@ -128,9 +132,19 @@ export class ProductRepository {
         // written, and would keep saying "founder" after it changed hands.
         ownerId: products.ownerId,
         ownerUsername: users.username,
+        // The detail page shows the category and links its landing page. The
+        // card already carries this; the page it links to did not, so the
+        // category pages received no internal links from the pages most
+        // likely to rank, and a reader wanting "more like this" had no route.
+        categorySlug: categories.slug,
+        categoryName: categories.name,
+        // Decides whether the page renders a join form. Read here rather than
+        // in a second query because the page has already paid for this row.
+        waitlistEnabled: products.waitlistEnabled,
       })
       .from(products)
       .leftJoin(users, eq(products.ownerId, users.id))
+      .leftJoin(categories, eq(categories.id, products.categoryId))
       .where(and(eq(products.slug, slug), publiclyVisibleProduct))
       .limit(1);
 
@@ -146,8 +160,13 @@ export class ProductRepository {
    */
   async findForAuthorization(id: string) {
     const [row] = await this.db
-      .select(ownerColumns)
+      // The category slug comes along because a moderation action has to
+      // invalidate the category page that still renders this listing's card,
+      // and a second query to learn one slug would be a second round trip on
+      // neon-http. Left join: a product need not have a category.
+      .select({ ...ownerColumns, categorySlug: categories.slug })
       .from(products)
+      .leftJoin(categories, eq(categories.id, products.categoryId))
       .where(eq(products.id, id))
       .limit(1);
 
@@ -189,6 +208,45 @@ export class ProductRepository {
       .where(eq(products.ownerId, ownerId))
       .orderBy(desc(products.updatedAt))
       .limit(limit);
+  }
+
+  /**
+   * The most recent moderation entry for each of one owner's products.
+   *
+   * An owner whose listing was hidden could previously see only the word
+   * "Hidden", in a column that disappears below 768px. What a moderator was
+   * required to record — the reason — was shown to other moderators and never
+   * to the person it was about, which is the opposite of the appeal path
+   * `docs/MODERATION.md` §10 promises.
+   *
+   * `DISTINCT ON` rather than a query per row: a page of listings each
+   * fetching its own history is the N+1 `docs/ENGINEERING.md` §5 forbids, and
+   * neon-http bills a round trip for every statement. The ordering matches
+   * `product_status_history_product_idx` on `(product_id, created_at)`, so
+   * this needs no new index.
+   *
+   * Bounded by the owner's own listings, which `listByOwner` already caps.
+   */
+  latestModerationByOwner(ownerId: string) {
+    return this.db
+      .selectDistinctOn([productStatusHistory.productId], {
+        productId: productStatusHistory.productId,
+        toValue: productStatusHistory.toValue,
+        reason: productStatusHistory.reason,
+        createdAt: productStatusHistory.createdAt,
+      })
+      .from(productStatusHistory)
+      .innerJoin(products, eq(products.id, productStatusHistory.productId))
+      .where(
+        and(
+          eq(products.ownerId, ownerId),
+          eq(productStatusHistory.axis, "MODERATION")
+        )
+      )
+      .orderBy(
+        productStatusHistory.productId,
+        desc(productStatusHistory.createdAt)
+      );
   }
 
   /**
@@ -442,6 +500,23 @@ export class ProductRepository {
       .returning({ id: products.id, slug: products.slug });
 
     return row ?? null;
+  }
+
+  /**
+   * Turns a product's waitlist on or off.
+   *
+   * Its own method rather than a field on `updateDetails`, because the two are
+   * different actions with different consequences: editing a tagline changes
+   * what a page says, and this changes whether the page starts collecting
+   * strangers' email addresses. Folding it in would make the switch reachable
+   * from any form that happens to post the field.
+   */
+  setWaitlistEnabled(productId: string, enabled: boolean) {
+    return this.db
+      .update(products)
+      .set({ waitlistEnabled: enabled, updatedAt: sql`now()` })
+      .where(eq(products.id, productId))
+      .returning({ id: products.id, slug: products.slug });
   }
 
   updateDetails(

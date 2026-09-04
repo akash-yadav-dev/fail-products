@@ -14,6 +14,24 @@ import type { FormActionState } from "@/lib/forms/action-state";
  * meaningful visible content without JavaScript dependence, and a comment
  * thread that only exists after hydration is invisible to a crawler and to
  * anyone whose script did not load.
+ *
+ * **One `ReportDialog` client island is mounted per comment**, up to
+ * `COMMENT_PAGE_SIZE`. The Phase 3 performance audit raised this (PERF-3) and
+ * it is knowingly left as it is. The markup cost is one button per row — the
+ * dialog body is portal-mounted only on open, verified in the served HTML —
+ * so what it actually costs is hydration work and flight payload, i.e. INP.
+ *
+ * Collapsing it to one dialog per thread needs the "which comment is open"
+ * state, and this component is a **server** component precisely so the thread
+ * is crawlable. Holding that state here would move the whole discussion into
+ * the client bundle and undo the property above; holding it in a provider
+ * still leaves one small client component per row to trigger it. Either way
+ * the saving could not be measured — the database holds zero comments, so
+ * there is no thread to profile.
+ *
+ * The trigger for revisiting: the first listing whose discussion approaches
+ * `COMMENT_PAGE_SIZE`. That is the same measurement that forces comment
+ * pagination, and both changes belong in the same piece of work.
  */
 
 export type CommentListItem = {
@@ -60,7 +78,11 @@ export function CommentList({
         return (
           <li
             key={comment.id}
-            className="flex flex-col gap-2 border-b border-border/60 pb-6 last:border-0 last:pb-0"
+            // The anchor a moderation queue entry links to. A borderline call
+            // is mostly decided by the thread around the quoted fragment, and
+            // without an id here there was no way to reach it.
+            id={comment.id}
+            className="flex scroll-mt-24 flex-col gap-2 border-b border-border/60 pb-6 last:border-0 last:pb-0"
           >
             <div className="flex flex-wrap items-center gap-2 text-sm">
               {comment.authorUsername ? (

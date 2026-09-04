@@ -21,6 +21,7 @@ export const PRODUCT_VERBS = [
   "delete",
   "moderate",
   "upload_image",
+  "export_waitlist",
 ] as const;
 
 export type ProductVerb = (typeof PRODUCT_VERBS)[number];
@@ -81,6 +82,16 @@ export function can(
       // Owner-only, and a moderator is deliberately excluded. A moderator has
       // the moderation axis; editing someone else's listing would let the site
       // alter a founder's own account of what happened (ADR-013).
+      return isOwner;
+
+    case "export_waitlist":
+      // Its own verb, and owner-only with the moderator excluded **more**
+      // firmly than above. A waitlist export is bulk personal data belonging to
+      // third parties who consented to hear from this founder and from nobody
+      // else (`docs/SECURITY.md` §11, `docs/LEGAL.md` §5). Moderation is a
+      // content power; it is not a reason to hold a list of strangers' email
+      // addresses, and folding this into `edit` would have granted it to
+      // whoever `edit` is granted to next.
       return isOwner;
 
     case "moderate":

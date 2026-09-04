@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Flag } from "lucide-react";
-import { useActionState, useState, useSyncExternalStore } from "react";
+import { useActionState, useId, useState, useSyncExternalStore } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ export function ReportDialog({
   const [state, formAction, pending] = useActionState(action, null);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>("");
+  const reasonHintId = useId();
 
   // Back to the page being reported, not to a dashboard. Re-validated by the
   // action with safeNextPath, so this is a convenience rather than a trust
@@ -103,7 +104,19 @@ export function ReportDialog({
           <DialogDescription>
             Reports go to a moderator. Nothing is removed automatically, and the
             {targetType === "PRODUCT" ? " listing" : " comment"} stays visible
-            until somebody has looked at it.
+            until somebody has looked at it.{" "}
+            {/*
+              Linked here rather than only in the footer: this dialog is the
+              moment somebody is deciding whether something breaks a rule, so
+              it is the one place the rules are worth a click.
+            */}
+            <Link
+              href="/guidelines"
+              className="rounded-sm underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              Read the guidelines
+            </Link>
+            .
           </DialogDescription>
         </DialogHeader>
 
@@ -120,9 +133,31 @@ export function ReportDialog({
             .
           </p>
         ) : state?.ok ? (
-          <Alert>
-            <AlertDescription>{state.message}</AlertDescription>
-          </Alert>
+          // The form is gone in this branch, and Cancel lived inside it — so
+          // without this button the only ways out are the small X, Escape, or
+          // an outside click. `useActionState` also holds this state for the
+          // life of the page, so reopening the dialog lands here again; that
+          // is correct under the duplicate rule, and saying so stops it
+          // reading as a bug.
+          <div className="flex flex-col gap-4">
+            <Alert role="status">
+              <AlertDescription>{state.message}</AlertDescription>
+            </Alert>
+            <p className="text-sm text-muted-foreground text-pretty">
+              You have already reported this{" "}
+              {targetType === "PRODUCT" ? "listing" : "comment"}. Reporting it
+              again will not move it up the queue.
+            </p>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                className="h-11"
+                onClick={() => setOpen(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
         ) : (
           <form action={formAction} className="flex flex-col gap-4">
             <input type="hidden" name="targetType" value={targetType} />
@@ -131,7 +166,11 @@ export function ReportDialog({
             <div className="flex flex-col gap-2">
               <Label htmlFor={`report-reason-${targetId}`}>What is wrong?</Label>
               <Select name="reason" value={reason} onValueChange={setReason} required>
-                <SelectTrigger id={`report-reason-${targetId}`} className="h-11">
+                <SelectTrigger
+                  id={`report-reason-${targetId}`}
+                  aria-describedby={reasonHintId}
+                  className="h-11"
+                >
                   <SelectValue placeholder="Choose a reason" />
                 </SelectTrigger>
                 <SelectContent>
@@ -142,7 +181,12 @@ export function ReportDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              {/*
+                Associated with the select rather than merely placed beside it.
+                Unassociated help text is invisible to a screen reader, which
+                is the reader most likely to need the reason spelled out.
+              */}
+              <p id={reasonHintId} className="text-xs text-muted-foreground">
                 {REPORT_REASONS.find((entry) => entry.value === reason)
                   ?.description ??
                   "Pick the closest match. A moderator reads every report."}
@@ -164,7 +208,13 @@ export function ReportDialog({
               />
             </div>
 
-            <TurnstileWidget siteKey={turnstileSiteKey} action="report" />
+            <TurnstileWidget
+              siteKey={turnstileSiteKey}
+              action="report"
+              // A token is single-use: a retry after a failure would otherwise
+              // post a spent one and fail again for an unrelated reason.
+              resetSignal={state}
+            />
 
             {state && !state.ok ? (
               <Alert variant="destructive">
