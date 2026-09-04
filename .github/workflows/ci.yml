@@ -294,6 +294,23 @@ jobs:
         run: pnpm build
 
       - name: Audit production dependencies
+        # A backstop, not the mechanism. The loop below cannot run long now,
+        # but a step that talks to a third party should never be able to hold a
+        # runner open on its own.
+        timeout-minutes: 4
+        env:
+          # `pnpm audit` retries a failed advisory request three times on its
+          # own, with escalating backoff -- one attempt against a dead registry
+          # took over five minutes. Wrapping that in a retry loop made a fast
+          # failure into a twelve-minute one, which is worse than what it
+          # replaced: with required status checks, a slow check blocks a merge
+          # just as firmly as a failing one, and it burns runner time doing it.
+          #
+          # So each attempt fails fast and the retrying is done here, where the
+          # budget is visible. Set as npm_config_* rather than CLI flags
+          # because that is the interface pnpm documents for network settings.
+          npm_config_fetch_retries: "0"
+          npm_config_fetch_timeout: "20000"
         run: |
           # `pnpm audit` exits non-zero for two unrelated reasons: it found an
           # advisory, or it could not reach the advisory service. Only the
@@ -324,7 +341,7 @@ jobs:
             fi
 
             echo "::warning::advisory service unreachable (attempt $attempt of 3); retrying"
-            sleep $((attempt * 15))
+            sleep $((attempt * 10))
           done
           set -e
 
