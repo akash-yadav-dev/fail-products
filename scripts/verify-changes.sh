@@ -392,15 +392,47 @@ else
 fi
 
 # --- Commit hygiene --------------------------------------------------------
+#
+# Merge commits are judged separately, and deliberately.
+#
+# A merge commit created by GitHub's merge button has an author the platform
+# chooses (the merging account's primary address) and no DCO trailer, and the
+# contributor who opened the pull request can change neither. Blocking on one is
+# therefore a finding nobody can act on: the commit is already in shared
+# history, and the only way to alter it is a force-push to a protected branch.
+#
+# That matters most on a promotion pull request. `dev -> main` legitimately
+# contains every merge commit `dev` has ever accumulated, so a hard failure
+# there makes the release gate permanently red for something no release can fix.
+#
+# The guarantee that matters is kept intact: a commit somebody wrote still has
+# to be signed off and correctly authored, and every such commit is still a
+# BLOCK. What a platform merge produces is reported as a warning -- loudly
+# enough that the address leak stays visible and the repository settings get
+# fixed, rather than silently accepted.
 if [ -n "$COMMITS" ]; then
-  ATTRIB=0; NOSIGN=""; BADAUTH=""
+  ATTRIB=0; NOSIGN=""; BADAUTH=""; MERGE_NOSIGN=""; MERGE_BADAUTH=""
   while IFS= read -r c; do
     [ -z "$c" ] && continue
     body="$(git log -1 --format='%B' "$c")"
     printf '%s' "$body" | grep -qiE 'Co-authored-by:.*(claude|anthropic|copilot|cursor|codex|gemini|gpt|\bai\b)|generated with \[?(claude|copilot|cursor)|^[[:space:]]*🤖' && ATTRIB=$((ATTRIB+1))
-    printf '%s' "$body" | grep -qi '^Signed-off-by:' || NOSIGN="$NOSIGN $(git log -1 --format='%h' "$c")"
+
+    # Two or more parents means a merge. `%P` is the parent list.
+    IS_MERGE=0
+    case "$(git log -1 --format='%P' "$c")" in *' '*) IS_MERGE=1 ;; esac
+
     ae="$(git log -1 --format='%ae' "$c")"
-    [ "$ae" != "$ALLOWED_EMAIL" ] && BADAUTH="$BADAUTH $(git log -1 --format='%h <%ae>' "$c")"
+    ref="$(git log -1 --format='%h' "$c")"
+
+    if printf '%s' "$body" | grep -qi '^Signed-off-by:'; then :; else
+      if [ "$IS_MERGE" -eq 1 ]; then MERGE_NOSIGN="$MERGE_NOSIGN $ref"
+      else NOSIGN="$NOSIGN $ref"; fi
+    fi
+
+    if [ "$ae" != "$ALLOWED_EMAIL" ]; then
+      if [ "$IS_MERGE" -eq 1 ]; then MERGE_BADAUTH="$MERGE_BADAUTH $ref <$ae>"
+      else BADAUTH="$BADAUTH $ref <$ae>"; fi
+    fi
   done <<< "$COMMITS"
 
   [ "$ATTRIB" -gt 0 ] && fail "$ATTRIB commit message(s) carry AI attribution (CLAUDE.md §1)" \
@@ -409,6 +441,11 @@ if [ -n "$COMMITS" ]; then
                    || note "  DCO sign-off           ok"
   [ -n "$BADAUTH" ] && fail "commit(s) with a non-allowlisted author:$BADAUTH" \
                     || note "  commit author          ok"
+
+  # Reported, never silent -- and never blocking, because nothing in a pull
+  # request can change a commit that is already merged.
+  [ -n "$MERGE_NOSIGN" ] && warn "merge commit(s) with no DCO sign-off, created by the merge button:$MERGE_NOSIGN"
+  [ -n "$MERGE_BADAUTH" ] && warn "merge commit(s) authored by the platform rather than the allowlisted address:$MERGE_BADAUTH -- set allow_merge_commit=false so no more are created, and turn on the account's email privacy. Existing ones cannot be changed without rewriting published history."
 fi
 
 # --- Hooks installed -------------------------------------------------------
