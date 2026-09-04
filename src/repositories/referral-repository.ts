@@ -44,11 +44,18 @@ export class ReferralRepository {
     const rows = await this.db
       .insert(referralDaily)
       .select(
+        // Every column of `referral_daily`, in the order the table declares
+        // them. Drizzle refuses an insert-select whose projection is not an
+        // exact positional match -- it cannot name the columns for you, so a
+        // shorter select would silently mean "put clicks in created_at".
+        // Typecheck does not catch it; the database does.
         this.db
           .select({
             productId: referralEvents.productId,
             day: sql<string>`${day}::date`.as("day"),
             clicks: count().as("clicks"),
+            createdAt: sql<Date>`now()`.as("created_at"),
+            updatedAt: sql<Date>`now()`.as("updated_at"),
           })
           .from(referralEvents)
           .where(

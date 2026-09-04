@@ -69,7 +69,7 @@ test.describe("outbound referral", () => {
     await page.goto(`/products/${seeded.slug}`);
 
     const visit = page.getByRole("link", { name: /^Visit / });
-    await expect(visit).toContainText("example.test");
+    await expect(visit).toContainText("example.com");
   });
 
   test("records the click and redirects to the attributed URL", async ({
@@ -77,7 +77,7 @@ test.describe("outbound referral", () => {
   }) => {
     const before = await clickCount(seeded.id);
 
-    // Not followed: the destination is example.test and does not resolve. The
+    // Not followed: the destination is example.com and does not resolve. The
     // response itself is what is under test.
     const response = await request.get(`/go/${seeded.slug}`, {
       maxRedirects: 0,
@@ -90,7 +90,7 @@ test.describe("outbound referral", () => {
     expect([302, 303, 307]).toContain(response.status());
 
     const location = response.headers()["location"];
-    expect(location).toContain("example.test");
+    expect(location).toContain("example.com");
     expect(location).toContain("utm_source=failproducts");
     expect(location).toContain("utm_medium=referral");
     expect(location).toContain("utm_campaign=product-page");

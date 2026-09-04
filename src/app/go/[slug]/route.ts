@@ -1,5 +1,5 @@
 // src/app/go/[slug]/route.ts
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   buildOutboundProductUrl,
@@ -27,8 +27,13 @@ import { ReferralError } from "@/services/referral/referral-service";
  *
  * **Never cached, at any layer.** A cached redirect is a click that was never
  * counted and a destination frozen at whatever it was when the cache filled.
- * `force-dynamic` keeps Next from prerendering it and `no-store` covers
- * everything downstream.
+ * `force-dynamic` keeps Next from prerendering it; the `Cache-Control` header
+ * below is what covers everything downstream.
+ *
+ * That header is set by hand, and the response is built by hand to carry it.
+ * `redirect()` signals by throwing, so there is no response object to attach a
+ * header to -- and a measured run showed the result going out with **no**
+ * `Cache-Control` at all, which a CDN is entitled to read as "cache it".
  *
  * Temporary, never permanent. A 301 is exactly the thing a browser is entitled
  * to remember and stop asking about, which would silently end the counting this
@@ -63,5 +68,14 @@ export async function GET(
   // a fallback would be the open redirect this route is careful not to be.
   if (!destination) notFound();
 
-  redirect(destination);
+  // 307, explicitly. Temporary, because a permanent redirect is exactly what a
+  // browser is entitled to remember and stop asking about -- which would end
+  // the counting this route exists for, silently and for that visitor only.
+  return new Response(null, {
+    status: 307,
+    headers: {
+      location: destination,
+      "cache-control": "no-store, private",
+    },
+  });
 }

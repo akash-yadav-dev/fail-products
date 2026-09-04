@@ -289,9 +289,9 @@ test.describe("the wired states", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Overview" })
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Outbound clicks by day" })
-    ).toBeVisible();
+    // CardTitle renders a div, not a heading element, so this is matched as
+    // text rather than by role.
+    await expect(page.getByText("Outbound clicks by day")).toBeVisible();
   });
 
   test("says the two unmeasured metrics are unmeasured", async ({ page }) => {
