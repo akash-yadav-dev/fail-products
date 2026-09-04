@@ -244,6 +244,26 @@ Every product website link from FailProducts should include a platform-owned att
 
 The system should record a lightweight referral event without collecting invasive visitor profiling.
 
+Every outbound link goes through `/go/<slug>`, which records the click and then redirects to the
+product's own website with the parameters above attached. The destination is read from the
+listing, never from the request, so the hop cannot be pointed anywhere a founder did not publish
+— and a hidden, draft, or removed listing does not resolve, so it cannot be used to reach
+content the directory is refusing to show. The link's visible text stays the destination host, so
+a reader still sees where they are going before they click.
+
+Counting on the product page itself is not an option: that page is prerendered and cached
+(ADR-027), so most visits never reach the server. A client-side beacon was the alternative and is
+worse — it counts only visitors who ran our JavaScript and did not leave before it fired, which
+produces a number that looks like traffic and is not.
+
+A referral event stores **the product and the instant, and nothing else**. No IP address, no user
+agent, no session or visitor identifier. That is what "without invasive visitor profiling" means
+here, and it has a consequence worth stating rather than discovering: these counts cannot be
+deduplicated per person, so they are clicks and must never be labelled visitors or traffic.
+
+Raw events are kept for 30 days and collapsed into a per-product, per-day rollup that is kept
+indefinitely (ADR-018). Everything a founder is shown reads the rollup.
+
 MVP metric:
 
 - outbound clicks from FailProducts to the product website.
