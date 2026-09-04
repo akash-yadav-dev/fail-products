@@ -24,7 +24,11 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/dashboard/", "/auth/"],
+        // `/go/` is the outbound hop. It produces no content of its own, only
+        // a redirect off this site, so a crawler following it spends budget to
+        // leave — and every follow would be counted as a click a person did
+        // not make, which is the one number this project promises is honest.
+        disallow: ["/api/", "/dashboard/", "/auth/", "/go/"],
       },
     ],
     sitemap: `${siteConfig.url}/sitemap.xml`,

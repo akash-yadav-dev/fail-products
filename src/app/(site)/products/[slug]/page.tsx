@@ -140,13 +140,25 @@ export default async function ProductPage({
   const { product } = resolved;
   const status = findFailureStatus(product.failureStatus as FailureStatus);
 
-  // Validated again here, not only at write (AGENTS.md §7), and the same call
-  // attaches the attribution parameters docs/PRODUCT.md §5.1 requires. A URL
-  // that fails validation renders no link at all rather than an unsafe one.
+  // Validated here, not only at write (AGENTS.md §7). A URL that fails
+  // validation renders no link at all rather than an unsafe one.
+  //
+  // The href is `/go/<slug>`, not the website itself. That route records the
+  // click and then redirects, carrying the attribution parameters
+  // docs/PRODUCT.md §5.1 requires — which is why `buildOutboundProductUrl` is
+  // called there rather than here now. Counting on this page is not an option:
+  // it is prerendered and cached for five minutes (ADR-027), so most visits
+  // never reach the server at all.
+  //
+  // The visible text stays the destination host. A reader still sees where the
+  // link goes before they click it, which is the property that matters; the hop
+  // is ours and is not somewhere a link can be pointed by anybody else.
   const outboundHref = buildOutboundProductUrl(
     product.websiteUrl,
     OUTBOUND_CAMPAIGNS.productPage
-  );
+  )
+    ? `/go/${product.slug}`
+    : null;
   const outboundHost = externalUrlHost(product.websiteUrl);
 
   // "Related" is deliberately just the rest of the directory for now. A real
