@@ -69,20 +69,27 @@ test.describe("the public directory", () => {
   }) => {
     await page.goto(`/products/${seeded.slug}`);
 
-    const outbound = page
-      .locator('a[href^="https://example.com"]')
-      .first();
+    // The href is the hop now, not the destination (ADR-018, slice 4.3): the
+    // page is cached, so a click has to reach the server somewhere to be
+    // counted. The attribution moved with it, onto the redirect.
+    const outbound = page.locator(`a[href^="/go/"]`).first();
     const href = await outbound.getAttribute("href");
-
-    // docs/PRODUCT.md §5.1 requires the platform's attribution parameters.
-    const url = new URL(href!);
-    expect(url.searchParams.get("utm_source")).toBe("failproducts");
-    expect(url.searchParams.get("utm_medium")).toBe("referral");
-    expect(url.searchParams.get("utm_campaign")).toBe("product-page");
+    expect(href).toBe(`/go/${seeded.slug}`);
 
     const rel = await outbound.getAttribute("rel");
     expect(rel).toContain("noopener");
     expect(rel).toContain("nofollow");
+
+    // docs/PRODUCT.md §5.1 requires the platform's attribution parameters. They
+    // are on the Location the hop issues, which is where the visitor actually
+    // goes, so that is where they are asserted.
+    const response = await page.request.get(href!, { maxRedirects: 0 });
+    const url = new URL(response.headers()["location"]!);
+
+    expect(url.origin).toBe("https://example.com");
+    expect(url.searchParams.get("utm_source")).toBe("failproducts");
+    expect(url.searchParams.get("utm_medium")).toBe("referral");
+    expect(url.searchParams.get("utm_campaign")).toBe("product-page");
   });
 
   test("404s a slug nobody holds", async ({ page }) => {
