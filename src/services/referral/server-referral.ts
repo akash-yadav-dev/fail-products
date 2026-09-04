@@ -40,3 +40,11 @@ export function referralHistory(productId: string, days?: number) {
 export function referralTotals(productIds: readonly string[]) {
   return referrals().totalsByProduct(productIds);
 }
+
+/** Clicks per day across a set of listings the caller already owns. */
+export function referralDailyAcross(
+  productIds: readonly string[],
+  days?: number
+) {
+  return referrals().dailyForProducts(productIds, days);
+}

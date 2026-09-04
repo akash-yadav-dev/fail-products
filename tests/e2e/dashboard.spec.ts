@@ -251,17 +251,54 @@ test.describe("the wired states", () => {
     }
   });
 
-  test("no metric claims a number", async ({ page }) => {
+  test("shows a number only for what is actually measured", async ({ page }) => {
+    // This used to assert that no metric showed a digit at all, which was
+    // right while there was no data layer. Slice 4.3 gave three of them one.
+    //
+    // The property worth keeping is sharper than the old one: a card shows a
+    // number when the number is real, and shows nothing when it is not. A zero
+    // is a claim -- "nobody clicked" -- and only the measured cards are
+    // entitled to make it.
     await page.goto("/dashboard");
 
-    // Every metric is a skeleton until a data layer exists. A digit appearing
-    // in a metric card means something started asserting a value.
-    const values = await page
-      .locator('[data-slot="card-title"]')
-      .allInnerTexts();
+    const cardValue = (label: string) =>
+      page
+        .locator('[data-slot="card"]')
+        .filter({ hasText: label })
+        .locator('[data-slot="card-title"]')
+        .first();
 
-    for (const value of values) {
-      expect(value.trim()).not.toMatch(/\d/);
+    for (const label of ["Outbound clicks", "Waitlist signups", "Comments"]) {
+      await expect(cardValue(label)).toHaveText(/\d/);
     }
+
+    // Neither of these can be counted without either making a cached page
+    // dynamic or trusting a client beacon, so neither is counted, and neither
+    // may print a figure.
+    for (const label of ["Product views", "Profile views"]) {
+      await expect(cardValue(label)).not.toHaveText(/\d/);
+    }
+  });
+
+  test("renders for an account with nothing in it", async ({ page }) => {
+    // The empty case is the one every new founder sees first, and the one an
+    // aggregate query is most likely to break on: an empty id list is a SQL
+    // syntax error rather than an empty result.
+    await page.goto("/dashboard");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Overview" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Outbound clicks by day" })
+    ).toBeVisible();
+  });
+
+  test("says the two unmeasured metrics are unmeasured", async ({ page }) => {
+    // Not a blank card. A founder reading a dashboard is entitled to know the
+    // difference between "nobody visited" and "this site does not count that".
+    await page.goto("/dashboard");
+
+    await expect(page.getByText(/Not measured\./).first()).toBeVisible();
   });
 });
