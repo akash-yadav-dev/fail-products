@@ -108,6 +108,7 @@ failproducts/
 │   │   ├── product-repository.ts
 │   │   ├── user-repository.ts
 │   │   ├── comment-repository.ts
+│   │   ├── waitlist-repository.ts
 │   │   └── ...
 │   │
 │   ├── db/
@@ -131,9 +132,10 @@ failproducts/
 │   ├── lib/
 │   │   ├── auth/
 │   │   ├── config/
+│   │   ├── csv/                 # escaping and formula neutralisation for exports
 │   │   ├── forms/               # the shape a Server Action returns to a form
 │   │   ├── ids/
-│   │   ├── validation/
+│   │   ├── validation/          # url, email — shared by domain/ and services/
 │   │   ├── urls/
 │   │   ├── security/
 │   │   └── utils/

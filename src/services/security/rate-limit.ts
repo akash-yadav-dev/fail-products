@@ -154,4 +154,64 @@ export const RATE_LIMITS = {
     windowSeconds: 60 * 60,
     layer: "counted",
   },
+
+  /**
+   * Waitlist signup, per address.
+   *
+   * `SECURITY.md` §11 names the `ratelimit` binding for this endpoint, for the
+   * same reason and with the same answer as `commentPost` above: nothing is
+   * deployed to Workers, so there is no binding to call, and counted is the
+   * stricter of the two.
+   *
+   * Per **address**, not per account — this endpoint is open to signed-out
+   * visitors, so there is no account to count against. Three an hour is
+   * somebody who did not receive the confirmation email and tried again,
+   * twice. Anything past that is a script using the form to send mail to an
+   * address its owner did not enter, which is the abuse that matters here:
+   * the request costs the attacker nothing and costs the recipient an email
+   * they did not ask for.
+   */
+  waitlistJoinEmail: {
+    name: "waitlist-join-email",
+    scope: "EMAIL",
+    limit: 3,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Waitlist signup, per address of the sender.
+   *
+   * The per-email limit alone stops one mailbox being flooded; it does nothing
+   * about one machine walking a list of a thousand addresses, which is the
+   * shape of the attack that gets a sending domain blocklisted. `SECURITY.md`
+   * §11 already pairs the two for sign-in, and this is the same threat.
+   */
+  waitlistJoinIp: {
+    name: "waitlist-join-ip",
+    scope: "IP",
+    limit: 20,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Waitlist CSV export, per account.
+   *
+   * The one rule in this table that `SECURITY.md` §11 already assigns to the
+   * counted layer rather than the binding, and it says why: this endpoint hands
+   * over bulk personal data in a single request. An accurate global count is
+   * the point — a per-colocation limit on an endpoint that returns everybody's
+   * email addresses is not a limit.
+   *
+   * Ten an hour is far more than a founder checking their list and far less
+   * than a scripted pull of every product they can reach.
+   */
+  waitlistExport: {
+    name: "waitlist-export",
+    scope: "USER",
+    limit: 10,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
 } as const satisfies Record<string, CountedRule>;

@@ -11,6 +11,7 @@ import {
   createProduct as createProductUseCase,
   listPublicDirectory as listPublicDirectoryUseCase,
   resolvePublicProduct as resolvePublicProductUseCase,
+  setWaitlistEnabled as setWaitlistEnabledUseCase,
   updateProduct as updateProductUseCase,
 } from "@/services/product/product-service";
 
@@ -60,6 +61,28 @@ export async function updateProduct(
   if (before && before.slug !== result.slug) {
     revalidatePath(`/products/${before.slug}`);
   }
+
+  return result;
+}
+
+/**
+ * Toggles a product's waitlist, and invalidates the page that changed.
+ *
+ * `/products/[slug]` is prerendered with a five-minute window (ADR-027), and
+ * the join form is part of that HTML. Without this, a founder who switches the
+ * waitlist on watches the page not gain a form, and — worse — one who switches
+ * it off keeps serving a form that collects addresses the action then refuses.
+ * The exact path, not a blanket invalidation.
+ */
+export async function setWaitlistEnabled(
+  input: Without<Parameters<typeof setWaitlistEnabledUseCase>[0]>
+) {
+  const result = await setWaitlistEnabledUseCase({
+    ...input,
+    repository: repository(),
+  });
+
+  revalidatePath(`/products/${result.slug}`);
 
   return result;
 }
