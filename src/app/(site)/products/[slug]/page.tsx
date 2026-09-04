@@ -15,6 +15,7 @@ import {
   SourceTierBadge,
   SourcedSection,
 } from "@/components/products/source-tier";
+import { WaitlistForm } from "@/components/waitlist/waitlist-form";
 import { Container } from "@/components/shared/container";
 import { PageHeader } from "@/components/shared/page-header";
 import { BreadcrumbJsonLd } from "@/components/shared/structured-data";
@@ -33,7 +34,7 @@ import {
   listPublicDirectory,
   resolvePublicProduct,
 } from "@/services/product/server-product";
-import { postCommentAction, reportAction } from "./actions";
+import { joinWaitlistAction, postCommentAction, reportAction } from "./actions";
 
 /**
  * A product listing.
@@ -327,6 +328,41 @@ export default async function ProductPage({
                 turnstileSiteKey={siteKey}
               />
             </section>
+
+            {/*
+              docs/DESIGN.md §6 puts "waitlist / action" between the discussion
+              and the related products, and that is where it earns its place:
+              somebody who has just read why a product failed and what other
+              people made of it is the person best placed to decide whether they
+              want to hear if it comes back.
+
+              Rendered only when the owner has switched it on. The flag comes
+              from the same row the page already loaded, so this costs no query
+              — and the whole section is absent from the prerendered HTML for
+              every listing that has not opted in.
+            */}
+            {product.waitlistEnabled ? (
+              <section id="waitlist" className="flex flex-col gap-4">
+                <h2 className="text-xl font-semibold tracking-tight">
+                  Hear if it comes back
+                </h2>
+                <p className="text-sm text-muted-foreground text-pretty">
+                  {product.ownerUsername ? `@${product.ownerUsername}` : "The founder"}{" "}
+                  is collecting addresses for {product.name}. FailProducts
+                  confirms yours by email first, and never writes to an address
+                  that has not been confirmed.
+                </p>
+
+                <div className="rounded-lg border bg-muted/30 p-4 sm:p-5">
+                  <WaitlistForm
+                    productId={product.id}
+                    productName={product.name}
+                    action={joinWaitlistAction}
+                    turnstileSiteKey={siteKey}
+                  />
+                </div>
+              </section>
+            ) : null}
 
             {others.length > 0 ? (
               <section className="flex flex-col gap-4">

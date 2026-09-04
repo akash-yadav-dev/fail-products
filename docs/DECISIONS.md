@@ -1037,3 +1037,90 @@ late. Until product deletion exists, nothing accumulates.
 
 Whoever implements product deletion is bound by this ADR and by the checklist above. A deletion
 PR that does not touch `comment_status_history` has not finished.
+
+## ADR-029 — Waitlist signups are double opt-in
+
+**Status:** Accepted
+**Date:** 2026-09-03
+
+Phase 4 slice 4.1 required this to be decided explicitly rather than left implicit either way.
+
+### Decision
+
+A waitlist signup creates an entry in `PENDING`, carrying a hashed single-use confirmation
+token. FailProducts sends one transactional email to the address. The address becomes
+`CONFIRMED` only when that link is followed.
+
+Consequences of that state, all of them enforced rather than documented:
+
+- **Only a `CONFIRMED` entry is exportable.** `WaitlistRepository.listConfirmedForExport`
+  filters in SQL, so a pending address cannot reach a founder's CSV.
+- **Only one confirmation email is ever sent per entry**, and never to an address that is
+  already confirmed. Re-submitting the form for a confirmed address is a no-op.
+- **A pending entry receives nothing else, ever.** An address that never answers stays
+  pending and stays silent.
+- **The consent record is `NOT NULL`** — both the timestamp and the verbatim wording — so an
+  entry that carries no evidence of consent is a row the database refuses.
+- **Removal is erasure, not a flag.** There is no `UNSUBSCRIBED` state; the row is deleted.
+
+Every waitlist email carries a removal link as well as a confirmation link.
+
+### Reason
+
+The alternative — single opt-in — is one form post away from a stranger putting somebody
+else's address on a list, and the person whose address it is finds out when the founder
+mails them. On this site that is worse than usual for three reasons.
+
+FailProducts is not the sender of record for what comes next. The founder is. The addresses
+leave the platform in a CSV, and once they have left there is no recall: an address collected
+without proof of consent becomes an address on somebody else's mailing list, permanently,
+with FailProducts' name on how it got there.
+
+`docs/LEGAL.md` §5 files waitlist entries as **consent-based**, which is the only lawful basis
+available — there is no contract with a subscriber and no legitimate interest in mailing a
+stranger about a third party's product. Consent that a person did not give is not a defect in
+the record; it is the absence of the basis.
+
+And the signup form is public, unauthenticated, and attached to every listing whose owner
+switches it on. That is a mailing endpoint anyone can call. Rate limits and Turnstile bound how
+*fast* it can be abused; only confirmation bounds *what the abuse achieves* — with double
+opt-in the worst outcome is one email to the victim, saying plainly that somebody entered their
+address and that nothing will be sent unless they act.
+
+The cost is real and is accepted: some people never confirm, so a founder's list is smaller
+than their signup count. A smaller list of people who asked is worth more than a larger list
+that includes people who did not, and the second kind is what gets a sending domain
+blocklisted.
+
+### Rejected alternatives
+
+- **Single opt-in.** Cheaper, and the list is bigger. It also makes the form a way to sign a
+  stranger up silently, and there is no point afterwards at which that is detectable — the
+  founder cannot tell a real subscriber from an injected one, and neither can we.
+- **Single opt-in with a "confirm later" nudge.** Keeps the unconfirmed addresses in the
+  export, which is the part that matters. The distinction exists only in the UI.
+- **Requiring an account to join a waitlist.** It would settle the identity question, and it
+  contradicts `docs/PRODUCT.md` §13, which lists "join a waitlist" among the things a
+  non-logged-in visitor can do. Sign-in is a bigger ask than a confirmation click, and it would
+  cost more signups than double opt-in does.
+- **A `PENDING` entry that expires on a timer.** A sweep, a schedule, and a decision about
+  what "too long" means, for a table that currently holds nothing. `CLAUDE.md` §7: the
+  measurement comes first. An unconfirmed entry is inert — it is never mailed and never
+  exported — so it costs storage and nothing else.
+
+### Consequences
+
+The dashboard's subscriber number is confirmed subscribers, not signups, and says so.
+
+A confirmation link performs a write on `GET`, which is normally something to avoid. It is
+correct here because the link *is* the mechanism: possession of a token delivered to a mailbox
+is the proof of control, and there is no way to demand a `POST` from a mail client. A
+prefetching client confirming the subscription is the same evidence a human click would be.
+
+The removal link deliberately does **not** take that trade. It renders a page with a button,
+because a prefetcher deleting somebody's subscription would be destroying data on nobody's
+instruction, and no evidence justifies that.
+
+Any future email surface — a founder update, a comeback announcement — inherits this: it sends
+to `CONFIRMED` entries only. A feature that needs to mail pending addresses is a feature that
+needs a different lawful basis, not a different query.

@@ -24,11 +24,14 @@ import {
 import { DashboardPageHeader } from "@/components/dashboard/dashboard-page-header";
 import { StatusBadge } from "@/components/products/status-badge";
 import type { FailureStatus } from "@/domain/product/failure-status";
+import { WaitlistToggle } from "@/components/waitlist/waitlist-toggle";
 import { currentUserOrNull } from "@/services/auth/current-user";
 import {
   listOwnedModerationNotices,
   listOwnedProducts,
 } from "@/services/product/server-product";
+import { subscriberCountsByProduct } from "@/services/waitlist/server-waitlist";
+import { setWaitlistEnabledAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Your products",
@@ -41,6 +44,10 @@ const COLUMNS = [
   { key: "status", label: "Status", className: "hidden sm:table-cell" },
   { key: "publication", label: "Publication", className: "hidden md:table-cell" },
   { key: "updated", label: "Updated", className: "hidden lg:table-cell" },
+  // Always visible, at every width. `docs/PRODUCT.md` §13 makes "export
+  // waitlist data" an MVP acceptance criterion, and a control that only exists
+  // above `lg` is a control a founder on a phone does not have.
+  { key: "waitlist", label: "Waitlist", className: "" },
 ] as const;
 
 /**
@@ -81,14 +88,17 @@ function moderationNotice(
 export default async function DashboardProductsPage() {
   const user = await currentUserOrNull();
 
-  // Both reads in parallel: neon-http sends each statement as its own request,
-  // so sequencing them would cost a round trip for no reason.
-  const [items, notices] = user
+  // Three reads, issued together: none needs another's answer, and neon-http
+  // sends each statement as its own request, so sequencing them would cost two
+  // round trips for nothing. Both the notices and the counts come back for
+  // every listing in one query rather than one per row.
+  const [items, notices, subscribers] = user
     ? await Promise.all([
         listOwnedProducts(user.id),
         listOwnedModerationNotices(user.id),
+        subscriberCountsByProduct(user.id),
       ])
-    : [[], []];
+    : [[], [], new Map<string, number>()];
 
   const noticeByProduct = new Map(
     notices.map((entry) => [entry.productId, entry])
@@ -232,6 +242,15 @@ export default async function DashboardProductsPage() {
                           <time dateTime={item.updatedAt.toISOString()}>
                             {item.updatedAt.toISOString().slice(0, 10)}
                           </time>
+                        </TableCell>
+
+                        <TableCell>
+                          <WaitlistToggle
+                            productId={item.id}
+                            enabled={item.waitlistEnabled}
+                            subscriberCount={subscribers.get(item.id) ?? 0}
+                            action={setWaitlistEnabledAction}
+                          />
                         </TableCell>
                       </TableRow>
                     );
