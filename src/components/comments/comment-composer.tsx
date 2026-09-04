@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useActionState, useState, useSyncExternalStore } from "react";
+import { useActionState, useId, useState, useSyncExternalStore } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ export function CommentComposer({
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const [length, setLength] = useState(0);
+  const hintId = useId();
 
   // Where to come back to after signing in. Sending a reader to /dashboard
   // after they clicked "sign in to comment" on a listing loses both the page
@@ -76,14 +77,28 @@ export function CommentComposer({
           >
             Sign in
           </Link>{" "}
-          to say what you saw. Criticise the product; help the builder.
+          to say what you saw. Criticise the product; help the builder —{" "}
+          <Link
+            href="/guidelines"
+            className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            the guidelines
+          </Link>{" "}
+          say where the line is.
         </p>
       </div>
     );
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
+    <form
+      action={formAction}
+      className="flex flex-col gap-3"
+      // React resets the form after a successful action, which empties the
+      // textarea without telling this component. Without this the counter
+      // keeps the number from the comment that was already posted.
+      onReset={() => setLength(0)}
+    >
       <input type="hidden" name="productId" value={productId} />
 
       <div className="flex flex-col gap-2">
@@ -94,6 +109,10 @@ export function CommentComposer({
           required
           rows={4}
           maxLength={MAX_COMMENT_LENGTH}
+          // Points at the hint below. Without it the rule about links and the
+          // character budget are visual-only, and a screen-reader user meets
+          // the limit by hitting it.
+          aria-describedby={hintId}
           onChange={(event) => setLength(event.target.value.length)}
           placeholder="What did you try, and where did it lose you?"
           // 16px or larger, so iOS does not zoom the viewport on focus. The
@@ -101,16 +120,42 @@ export function CommentComposer({
           // where that zoom makes a form unusable.
           className="min-h-28 text-base"
         />
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        {/*
+          Not a live region. It used to be, over a string that also carried the
+          static hint, so every keystroke queued a re-announcement of the whole
+          sentence. `aria-describedby` reads it once, on focus, which is when
+          it is useful.
+        */}
+        <p id={hintId} className="text-xs text-muted-foreground">
           {length > 0 ? length + " of " + MAX_COMMENT_LENGTH + " characters. " : null}
-          Plain text. Links are shown as their destination.
+          Plain text. Links are shown as their destination.{" "}
+          <Link
+            href="/guidelines"
+            className="rounded-sm underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            Read the guidelines
+          </Link>
+          .
         </p>
       </div>
 
-      <TurnstileWidget siteKey={turnstileSiteKey} action="comment" />
+      <TurnstileWidget
+        siteKey={turnstileSiteKey}
+        action="comment"
+        // A token is single-use. Without this, a second attempt after any
+        // failure re-posts a spent token and fails again for a reason that has
+        // nothing to do with what the person wrote.
+        resetSignal={state}
+      />
 
-      {state && !state.ok ? (
-        <Alert variant="destructive">
+      {state ? (
+        <Alert
+          variant={state.ok ? "default" : "destructive"}
+          // Announced without stealing focus. Posting used to be confirmed
+          // only by the comment appearing after revalidation, which nothing
+          // announces — silence after pressing the primary button.
+          role="status"
+        >
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}

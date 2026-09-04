@@ -175,7 +175,12 @@ Do not use “dead” as the canonical database status. It can be a presentation
 - Status filters.
 - Product detail pages.
 - Pagination or cursor-based loading.
-- Basic sorting: newest, recently updated, most discussed, most referred.
+- Basic sorting: newest, recently updated. **Most discussed** and **most referred** are
+  not implemented and are not in the MVP: a keyset sort needs a stored ordered column,
+  and neither a comment count nor a referral count is one without denormalising it onto
+  `products` and keeping it correct through inserts, moderation changes, and cascade
+  deletes. That is earned by a measurement (`CLAUDE.md` §7), not assumed — the first
+  listing whose discussion is worth finding from a list is the measurement.
 
 #### Product page
 

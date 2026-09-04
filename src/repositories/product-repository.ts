@@ -128,9 +128,16 @@ export class ProductRepository {
         // written, and would keep saying "founder" after it changed hands.
         ownerId: products.ownerId,
         ownerUsername: users.username,
+        // The detail page shows the category and links its landing page. The
+        // card already carries this; the page it links to did not, so the
+        // category pages received no internal links from the pages most
+        // likely to rank, and a reader wanting "more like this" had no route.
+        categorySlug: categories.slug,
+        categoryName: categories.name,
       })
       .from(products)
       .leftJoin(users, eq(products.ownerId, users.id))
+      .leftJoin(categories, eq(categories.id, products.categoryId))
       .where(and(eq(products.slug, slug), publiclyVisibleProduct))
       .limit(1);
 
@@ -146,8 +153,13 @@ export class ProductRepository {
    */
   async findForAuthorization(id: string) {
     const [row] = await this.db
-      .select(ownerColumns)
+      // The category slug comes along because a moderation action has to
+      // invalidate the category page that still renders this listing's card,
+      // and a second query to learn one slug would be a second round trip on
+      // neon-http. Left join: a product need not have a category.
+      .select({ ...ownerColumns, categorySlug: categories.slug })
       .from(products)
+      .leftJoin(categories, eq(categories.id, products.categoryId))
       .where(eq(products.id, id))
       .limit(1);
 
@@ -189,6 +201,45 @@ export class ProductRepository {
       .where(eq(products.ownerId, ownerId))
       .orderBy(desc(products.updatedAt))
       .limit(limit);
+  }
+
+  /**
+   * The most recent moderation entry for each of one owner's products.
+   *
+   * An owner whose listing was hidden could previously see only the word
+   * "Hidden", in a column that disappears below 768px. What a moderator was
+   * required to record — the reason — was shown to other moderators and never
+   * to the person it was about, which is the opposite of the appeal path
+   * `docs/MODERATION.md` §10 promises.
+   *
+   * `DISTINCT ON` rather than a query per row: a page of listings each
+   * fetching its own history is the N+1 `docs/ENGINEERING.md` §5 forbids, and
+   * neon-http bills a round trip for every statement. The ordering matches
+   * `product_status_history_product_idx` on `(product_id, created_at)`, so
+   * this needs no new index.
+   *
+   * Bounded by the owner's own listings, which `listByOwner` already caps.
+   */
+  latestModerationByOwner(ownerId: string) {
+    return this.db
+      .selectDistinctOn([productStatusHistory.productId], {
+        productId: productStatusHistory.productId,
+        toValue: productStatusHistory.toValue,
+        reason: productStatusHistory.reason,
+        createdAt: productStatusHistory.createdAt,
+      })
+      .from(productStatusHistory)
+      .innerJoin(products, eq(products.id, productStatusHistory.productId))
+      .where(
+        and(
+          eq(products.ownerId, ownerId),
+          eq(productStatusHistory.axis, "MODERATION")
+        )
+      )
+      .orderBy(
+        productStatusHistory.productId,
+        desc(productStatusHistory.createdAt)
+      );
   }
 
   /**

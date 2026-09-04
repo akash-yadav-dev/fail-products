@@ -43,7 +43,8 @@ export async function postCommentAction(
   if (!challenge.ok) {
     return {
       ok: false,
-      message: "That check did not complete. Reload the page and try again.",
+      message:
+        "The spam check did not finish. Try again — what you wrote is still here.",
     };
   }
 
@@ -122,7 +123,8 @@ export async function reportAction(
   if (!challenge.ok) {
     return {
       ok: false,
-      message: "That check did not complete. Reload the page and try again.",
+      message:
+        "The spam check did not finish. Try again — what you wrote is still here.",
     };
   }
 

@@ -2,8 +2,12 @@
 import { ImageResponse } from "next/og";
 
 import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
+import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { siteConfig } from "@/lib/config/site";
-import { resolvePublicProduct } from "@/services/product/server-product";
+import {
+  listProductsForSitemap,
+  resolvePublicProduct,
+} from "@/services/product/server-product";
 
 /**
  * The share card for one product.
@@ -40,6 +44,34 @@ export const alt = "A product listing on FailProducts";
  * changes least.
  */
 export const revalidate = 3600;
+
+/**
+ * Prerender the same listings the page itself prerenders.
+ *
+ * `revalidate` above does nothing without this. Measured before it existed:
+ * `cache-control: public, max-age=0, must-revalidate`, no `x-nextjs-cache`
+ * header at all, and a flat ~300 ms over five consecutive requests — every one
+ * of them a Neon query plus a full 1200x630 satori render. That is precisely
+ * the burst the comment above claims to defend against, and it was arriving
+ * uncached.
+ *
+ * The sibling page documents the same trap for the same reason. A route with
+ * dynamic params is rendered on demand unless its params are known at build
+ * time, and `revalidate` describes how long a cached render lives — so with
+ * nothing cached, it describes nothing.
+ *
+ * `dynamicParams` defaults to true, so a listing published after the build
+ * still gets a card; it is rendered once on demand and then cached like the
+ * rest.
+ */
+export async function generateStaticParams() {
+  // CI builds without a database on purpose. An empty list is correct there:
+  // every card is then served on demand, which is what happens today anyway.
+  if (canSkipDatabaseAtBuild()) return [];
+
+  const products = await listProductsForSitemap(1_000);
+  return products.map((product) => ({ slug: product.slug }));
+}
 
 export default async function Image({
   params,
