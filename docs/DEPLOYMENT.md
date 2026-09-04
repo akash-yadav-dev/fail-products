@@ -28,7 +28,8 @@ Do not create extra infrastructure environments until needed.
 `.env.example` lists names only. Local and preview values are supplied through the
 environment, and production secrets are stored with the provider. The application
 uses `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL`, GitHub OAuth credentials,
-ZeptoMail credentials, R2 credentials, and Turnstile credentials. `E2E_FAULT_ROUTES` and
+ZeptoMail credentials, R2 credentials, Turnstile credentials, and `JOB_TRIGGER_SECRET`
+(the shared secret a scheduled job presents to trigger itself — see Scheduled jobs below). `E2E_FAULT_ROUTES` and
 `E2E_AUTH_BYPASS` are deliberately not deployment variables; they are injected only by the local
 Playwright server to exercise error and authenticated dashboard flows. Never set either in preview
 or production.
@@ -183,6 +184,30 @@ Migration validation
 ```
 
 Do not deploy a schema change without the matching migration.
+
+## 8.1 Scheduled jobs
+
+One job exists, and ADR-018 requires it to be **running**, not merely written: the
+`referral_events` rollup and prune.
+
+```text
+POST /api/jobs/referral-maintenance
+Authorization: Bearer $JOB_TRIGGER_SECRET
+```
+
+Daily is enough — raw rows are retained for 30 days, so the window is generous. Trigger it with a
+Cloudflare Cron Trigger, which is what `docs/ARCHITECTURE.md` §9 prefers over new infrastructure.
+
+The route 404s when `JOB_TRIGGER_SECRET` is unset **and** the process is not a deployment, so a
+clean checkout, the test suite, and CI need no secret. In a deployment with no secret it throws:
+a site whose retention job cannot be triggered accumulates click rows forever, and that is the
+silent failure §1.9 of `ENGINEERING.md` forbids.
+
+The work itself lives in `services/referral/referral-service.ts` and knows nothing about HTTP, so
+moving to a queue or a worker later changes the route and nothing else.
+
+**Until there is a deployment there is no scheduler, so the job does not run.** The launch gate in
+`docs/ROADMAP.md` lists it for that reason.
 
 ## 9. Rollback
 
