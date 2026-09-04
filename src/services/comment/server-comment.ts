@@ -53,6 +53,17 @@ export function listComments(
   return listCommentsUseCase({ ...input, repository: repository() });
 }
 
+/**
+ * How much discussion one owner's listings carry, as a single number.
+ *
+ * This is the caller `countPublicForProduct` was kept for -- the overview,
+ * where one total is the whole question. It is still not a per-card count.
+ */
+export function countCommentsAcross(productIds: readonly string[]) {
+  if (productIds.length === 0) return Promise.resolve(0);
+  return repository().countPublicByProducts(productIds);
+}
+
 // Deleted: `countComments`. Nothing called it. The count it wraps
 // (`CommentRepository.countPublicForProduct`) is kept and still covered by
 // tests/integration/comment-visibility.test.ts, because it is the read a
