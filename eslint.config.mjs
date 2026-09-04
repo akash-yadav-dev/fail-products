@@ -7,6 +7,13 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Agent worktrees are checked out inside the repository, so their build
+    // output is a second copy of .next that eslint would otherwise lint --
+    // 76 errors from minified Turbopack chunks, in a run that says nothing
+    // about this project source. It made verify-changes.sh report BLOCK on a
+    // branch whose own source was clean, which is worse than no check.
+    ".claude/**",
+
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
