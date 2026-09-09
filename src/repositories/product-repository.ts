@@ -2,6 +2,7 @@
 import { and, asc, desc, eq, lt, or, sql, type SQL } from "drizzle-orm";
 
 import type { Database } from "@/db";
+import { uuidv7 } from "@/lib/ids/uuid-v7";
 import { publiclyVisibleProduct } from "@/db/queries/product-visibility";
 import {
   categories,
@@ -53,14 +54,27 @@ const ownerColumns = {
 } as const;
 
 /**
- * A card's columns: the public product plus the category it sits in.
+ * A card's columns: what a card actually renders, plus the category it sits in.
+ *
+ * Deliberately not `...publicColumns`. A card shows a name, a tagline, a
+ * status, and a date; it never shows `description`, which `docs/PRODUCT.md`
+ * caps at 20,000 characters. Spreading the public set made a 48-card page
+ * carry up to ~1 MB of description text out of Postgres, across the network,
+ * and into the render — none of it displayed. The columns are listed rather
+ * than subtracted so adding one to `publicColumns` cannot silently put it back.
  *
  * The category comes from a join rather than a query per row, because a page of
  * 24 cards each fetching its own category is the N+1 `ENGINEERING.md` §5
  * forbids.
  */
 const listColumns = {
-  ...publicColumns,
+  id: products.id,
+  slug: products.slug,
+  name: products.name,
+  tagline: products.tagline,
+  failureStatus: products.failureStatus,
+  publishedAt: products.publishedAt,
+  updatedAt: products.updatedAt,
   categorySlug: categories.slug,
   categoryName: categories.name,
 } as const;
@@ -187,7 +201,7 @@ export class ProductRepository {
       .select({ productId: productSlugHistory.productId, currentSlug: products.slug })
       .from(productSlugHistory)
       .innerJoin(products, eq(productSlugHistory.productId, products.id))
-      .where(eq(productSlugHistory.slug, slug))
+      .where(and(eq(productSlugHistory.slug, slug), publiclyVisibleProduct))
       .limit(1);
 
     return row ?? null;
@@ -199,7 +213,7 @@ export class ProductRepository {
       .select(ownerColumns)
       .from(products)
       .where(eq(products.ownerId, ownerId))
-      .orderBy(desc(products.updatedAt))
+      .orderBy(desc(products.updatedAt), desc(products.id))
       .limit(limit);
   }
 
@@ -218,9 +232,12 @@ export class ProductRepository {
    * `product_status_history_product_idx` on `(product_id, created_at)`, so
    * this needs no new index.
    *
-   * Bounded by the owner's own listings, which `listByOwner` already caps.
+    * Restricted to the same fifty most recently updated listings as the dashboard.
    */
   latestModerationByOwner(ownerId: string) {
+    const ownedPage = this.db.select({ id: products.id }).from(products)
+      .where(eq(products.ownerId, ownerId))
+      .orderBy(desc(products.updatedAt), desc(products.id)).limit(50);
     return this.db
       .selectDistinctOn([productStatusHistory.productId], {
         productId: productStatusHistory.productId,
@@ -233,6 +250,7 @@ export class ProductRepository {
       .where(
         and(
           eq(products.ownerId, ownerId),
+          sql`${products.id} IN (${ownedPage})`,
           eq(productStatusHistory.axis, "MODERATION")
         )
       )
@@ -486,13 +504,21 @@ export class ProductRepository {
     categoryId?: string | null;
     failureStatus: FailureStatus;
   }) {
-    const [row] = await this.db
-      .insert(products)
-      .values(input)
-      .onConflictDoNothing({ target: products.slug })
-      .returning({ id: products.id, slug: products.slug });
-
-    return row ?? null;
+    const result = await this.db.execute<{ id: string; slug: string }>(sql`
+      WITH created AS (
+        INSERT INTO ${products} (id, owner_id, slug, name, tagline, description, website_url, category_id, failure_status)
+        VALUES (${uuidv7()}, ${input.ownerId}, ${input.slug}, ${input.name}, ${input.tagline},
+          ${input.description}, ${input.websiteUrl}, ${input.categoryId ?? null}, ${input.failureStatus})
+        ON CONFLICT (slug) DO NOTHING RETURNING id, slug
+      ), publication AS (
+        INSERT INTO ${productStatusHistory} (id, product_id, axis, to_value, actor_id, actor_role)
+        SELECT ${uuidv7()}, id, 'PUBLICATION', 'DRAFT', ${input.ownerId}, 'OWNER' FROM created
+      ), failure AS (
+        INSERT INTO ${productStatusHistory} (id, product_id, axis, to_value, actor_id, actor_role)
+        SELECT ${uuidv7()}, id, 'FAILURE', ${input.failureStatus}, ${input.ownerId}, 'OWNER' FROM created
+      ) SELECT id, slug FROM created
+    `);
+    return result.rows[0] ?? null;
   }
 
   updateDetails(

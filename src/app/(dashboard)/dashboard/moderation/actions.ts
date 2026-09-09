@@ -77,6 +77,11 @@ export async function moderateProductAction(
     });
 
     revalidatePath("/products/" + result.slug);
+    // Related cards, share images, and sitemap entries also disclose the listing.
+    // Route groups never reach a cache tag — Next strips them when it derives
+    // the implicit tags — so this is the URL path, not the folder path.
+    revalidatePath("/products", "layout");
+    revalidatePath("/sitemap.xml");
     revalidatePath("/dashboard/moderation");
 
     // The listing's own page is not the only place its card is rendered.
@@ -133,6 +138,8 @@ function failure(error: unknown): FormActionState {
   }
 
   switch (error.code) {
+    case "RATE_LIMITED":
+      return { ok: false, message: "Too many moderation actions. Try again in ten minutes." };
     case "NOT_SIGNED_IN":
     case "FORBIDDEN":
       // The same answer for both, and deliberately uninformative: a moderation

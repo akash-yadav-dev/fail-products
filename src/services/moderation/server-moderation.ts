@@ -89,6 +89,7 @@ export function moderateComment(
     reports: deps.reports,
     comments: deps.comments,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }
 
@@ -101,6 +102,7 @@ export function moderateProduct(
     reports: deps.reports,
     products: deps.products,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }
 
@@ -112,5 +114,6 @@ export function resolveReport(
     ...input,
     reports: deps.reports,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }

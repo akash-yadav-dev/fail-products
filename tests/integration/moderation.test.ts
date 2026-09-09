@@ -852,4 +852,40 @@ describe.skipIf(noDatabase)("reporting and moderation", () => {
     // Null is a legitimate answer: a product need not have a category.
     expect(result).toHaveProperty("categorySlug");
   });
+  it.each(["DRAFT", "ARCHIVED"] as const)("refuses reports against a %s listing", async (publicationState) => {
+    const listing = await product({ publicationState });
+    await expect(fileReport({ ...deps(), viewer: { userId: await account() }, targetType: "PRODUCT", targetId: listing.id, reason: "SPAM", detail: null }))
+      .rejects.toMatchObject({ code: "TARGET_NOT_FOUND" });
+    expect(await db!.select().from(reports).where(eq(reports.productId, listing.id))).toHaveLength(0);
+  });
+
+  it("refuses reports against a comment on an unpublished listing", async () => {
+    // The comment half of the rule above. A listing that was never published
+    // has no public discussion, so a comment on it is not public either and
+    // answering for one would confirm the listing exists.
+    const listing = await product();
+    const posted = await comment(listing.id);
+    const input = { ...deps(), viewer: { userId: await account() }, targetType: "COMMENT", targetId: posted.id, reason: "SPAM", detail: null };
+    await db!.update(products).set({ publicationState: "DRAFT" }).where(eq(products.id, listing.id));
+    await expect(fileReport(input)).rejects.toMatchObject({ code: "TARGET_NOT_FOUND" });
+  });
+
+  it("still accepts a report against content a moderator has already hidden", async () => {
+    // Deliberately the opposite of the two cases above, and the distinction is
+    // publication, not moderation. Hidden content was public, so it is exactly
+    // what an appeal or a privacy request under `docs/MODERATION.md` §10 is
+    // filed against — and those arrive after the takedown, never before.
+    const listing = await product();
+    const posted = await comment(listing.id);
+    const input = { ...deps(), viewer: { userId: await account() }, targetType: "COMMENT", targetId: posted.id, reason: "PRIVACY", detail: null };
+
+    await db!.update(comments).set({ moderationState: "HIDDEN" }).where(eq(comments.id, posted.id));
+    await expect(fileReport(input)).resolves.toMatchObject({ created: true });
+
+    await db!.update(products).set({ moderationState: "REMOVED" }).where(eq(products.id, listing.id));
+    await expect(
+      fileReport({ ...deps(), viewer: { userId: await account() }, targetType: "PRODUCT", targetId: listing.id, reason: "PRIVACY", detail: null })
+    ).resolves.toMatchObject({ created: true });
+  });
+
 });

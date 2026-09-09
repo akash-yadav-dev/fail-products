@@ -56,6 +56,8 @@ export async function submitProductAction(
 
 function messageFor(code: ProductError["code"]): string {
   switch (code) {
+    case "RATE_LIMITED":
+      return "You have submitted several listings. Try again in an hour.";
     case "INVALID_NAME":
       return "Give the product a name, up to 120 characters.";
     case "INVALID_URL":

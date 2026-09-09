@@ -32,6 +32,7 @@ export async function postCommentAction(
 ): Promise<FormActionState> {
   const user = await currentUser();
   const productId = String(formData.get("productId") ?? "");
+  if (!user) return { ok: false, message: "Sign in to comment." };
 
   // Before anything is written, and server-side. A token checked only in the
   // browser is a widget an attacker posts around (docs/SECURITY.md §11).
@@ -114,6 +115,7 @@ export async function reportAction(
   formData: FormData
 ): Promise<FormActionState> {
   const user = await currentUser();
+  if (!user) return { ok: false, message: "Sign in to report something." };
 
   const challenge = await verifyTurnstile(
     formData.get(TURNSTILE_FIELD),

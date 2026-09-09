@@ -2,14 +2,18 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
+import { publishedProduct } from "@/db/queries/product-visibility";
 import {
   commentStatusHistory,
   comments,
   products,
+  productStatusHistory,
   reports,
   users,
 } from "@/db/schema";
 import type { CommentModerationState } from "@/domain/comment/moderation";
+import type { ModerationState } from "@/domain/product/transitions";
+import { uuidv7 } from "@/lib/ids/uuid-v7";
 import type {
   ReportReason,
   ReportStatus,
@@ -28,6 +32,51 @@ import type {
 
 export class ReportRepository {
   constructor(private readonly db: Database) {}
+
+  /** State, history, and report resolution succeed together; a stale state changes nothing. */
+  async applyCommentModeration(input: {
+    commentId: string; from: CommentModerationState; to: CommentModerationState;
+    actorId: string; reportId: string | null; reason: string; now: Date;
+  }) {
+    const result = await this.db.execute(sql`
+      WITH changed AS (
+        UPDATE ${comments} SET moderation_state = ${input.to}, updated_at = ${input.now}
+        WHERE id = ${input.commentId} AND moderation_state = ${input.from}
+        RETURNING id
+      ), audited AS (
+        INSERT INTO ${commentStatusHistory} (id, comment_id, from_value, to_value, actor_id, report_id, reason)
+        SELECT ${uuidv7()}, id, ${input.from}, ${input.to}, ${input.actorId}, ${input.reportId}, ${input.reason} FROM changed
+        RETURNING comment_id
+      ), resolved AS (
+        UPDATE ${reports} SET status = ${input.to === "VISIBLE" ? "DISMISSED" : "ACTIONED"},
+          resolved_by = ${input.actorId}, resolved_at = ${input.now}, resolution_note = ${input.reason}, updated_at = ${input.now}
+        WHERE comment_id IN (SELECT comment_id FROM audited) AND status = 'OPEN'
+      ) SELECT comment_id FROM audited
+    `);
+    return result.rows.length === 1;
+  }
+
+  async applyProductModeration(input: {
+    productId: string; from: ModerationState; to: ModerationState;
+    actorId: string; reason: string; now: Date;
+  }) {
+    const result = await this.db.execute(sql`
+      WITH changed AS (
+        UPDATE ${products} SET moderation_state = ${input.to}, updated_at = ${input.now}
+        WHERE id = ${input.productId} AND moderation_state = ${input.from}
+        RETURNING id
+      ), audited AS (
+        INSERT INTO ${productStatusHistory} (id, product_id, axis, from_value, to_value, actor_id, actor_role, reason)
+        SELECT ${uuidv7()}, id, 'MODERATION', ${input.from}, ${input.to}, ${input.actorId}, 'MODERATOR', ${input.reason} FROM changed
+        RETURNING product_id
+      ), resolved AS (
+        UPDATE ${reports} SET status = ${input.to === "NONE" ? "DISMISSED" : "ACTIONED"},
+          resolved_by = ${input.actorId}, resolved_at = ${input.now}, resolution_note = ${input.reason}, updated_at = ${input.now}
+        WHERE product_id IN (SELECT product_id FROM audited) AND status = 'OPEN'
+      ) SELECT product_id FROM audited
+    `);
+    return result.rows.length === 1;
+  }
 
   /**
    * Files a report, collapsing a duplicate rather than rejecting it.
@@ -64,6 +113,7 @@ export class ReportRepository {
       .where(
         and(
           eq(reports.reporterId, input.reporterId),
+          eq(reports.status, "OPEN"),
           input.productId
             ? eq(reports.productId, input.productId)
             : eq(reports.commentId, input.commentId!)
@@ -74,24 +124,37 @@ export class ReportRepository {
     return { id: existing?.id ?? "", created: false };
   }
 
-  /** A product a report may be filed against, or null. */
+  /**
+   * A product a report may be filed against, or null.
+   *
+   * `publishedProduct`, not `publiclyVisibleProduct`: a listing already hidden
+   * or removed is the one an appeal is about, so the report path has to keep
+   * reaching it. An unpublished draft is a different thing entirely — it was
+   * never shown to anyone, and answering for it would confirm it exists.
+   */
   async findReportableProduct(productId: string) {
     const [row] = await this.db
       .select({ id: products.id, slug: products.slug })
       .from(products)
-      .where(eq(products.id, productId))
+      .where(and(eq(products.id, productId), publishedProduct))
       .limit(1);
 
     return row ?? null;
   }
 
-  /** A comment a report may be filed against, or null. */
+  /**
+   * A comment a report may be filed against, or null.
+   *
+   * The comment's own moderation state is deliberately not filtered, for the
+   * reason above. The product's publication is, because a comment on a listing
+   * that was never published is not public either.
+   */
   async findReportableComment(commentId: string) {
     const [row] = await this.db
       .select({ id: comments.id, productSlug: products.slug })
       .from(comments)
       .innerJoin(products, eq(comments.productId, products.id))
-      .where(eq(comments.id, commentId))
+      .where(and(eq(comments.id, commentId), publishedProduct))
       .limit(1);
 
     return row ?? null;
@@ -198,55 +261,9 @@ export class ReportRepository {
     return row?.total ?? 0;
   }
 
-  /**
-   * Closes every open report on one target at once.
-   *
-   * When a moderator hides a comment, the five reports about that comment are
-   * all answered by the same act. Leaving them open means the queue keeps
-   * showing work that is already done, which is how a queue stops being read.
-   */
-  async resolveOpenForTarget(input: {
-    productId?: string;
-    commentId?: string;
-    status: Exclude<ReportStatus, "OPEN">;
-    resolvedBy: string;
-    note: string | null;
-    now: Date;
-  }): Promise<string[]> {
-    const target = input.productId
-      ? eq(reports.productId, input.productId)
-      : eq(reports.commentId, input.commentId!);
-
-    const rows = await this.db
-      .update(reports)
-      .set({
-        status: input.status,
-        resolvedBy: input.resolvedBy,
-        resolvedAt: input.now,
-        resolutionNote: input.note,
-        updatedAt: input.now,
-      })
-      .where(and(target, eq(reports.status, "OPEN")))
-      .returning({ id: reports.id });
-
-    return rows.map((row) => row.id);
-  }
-
   // -------------------------------------------------------------------------
   // Audit
   // -------------------------------------------------------------------------
-
-  /** Records a comment moderation action. Never conditional. */
-  async recordCommentAction(input: {
-    commentId: string;
-    fromValue: CommentModerationState;
-    toValue: CommentModerationState;
-    actorId: string;
-    reportId: string | null;
-    reason: string;
-  }) {
-    await this.db.insert(commentStatusHistory).values(input);
-  }
 
   /** One comment's moderation history, newest first. */
   async listCommentHistory(commentId: string, limit = 50) {

@@ -88,6 +88,7 @@ export async function sendTransactionalEmail(
 
   try {
     response = await fetchImpl(ENDPOINT, {
+      signal: AbortSignal.timeout(10_000),
       method: "POST",
       headers: {
         // Zoho's documented scheme. Not "Bearer".

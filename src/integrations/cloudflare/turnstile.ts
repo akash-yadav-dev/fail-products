@@ -35,23 +35,28 @@ export async function verifyTurnstileToken(
     throw new Error("TURNSTILE_SECRET_KEY is not set. See .env.example.");
   }
   if (!token) return { ok: false, reason: "missing-input-response" };
+  if (token.length > 2048) return { ok: false, reason: "invalid-input-response" };
 
   const body = new FormData();
   body.append("secret", secret);
   body.append("response", token);
   if (remoteIp) body.append("remoteip", remoteIp);
 
-  let response: Response;
+  // The timeout is the point: siteverify sits in front of every write this
+  // form guards, so a Cloudflare stall must fail the check rather than hold a
+  // request open. Parsing happens inside the same `try` because a truncated or
+  // non-JSON body is the same kind of failure as never reaching the endpoint,
+  // and a rejected `json()` outside it would escape as a 500.
+  let result: SiteverifyResponse;
   try {
-    response = await fetchImpl(SITEVERIFY_URL, { method: "POST", body });
+    const response = await fetchImpl(SITEVERIFY_URL, { method: "POST", body, signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return { ok: false, reason: `siteverify-http-${response.status}` };
+    result = (await response.json()) as SiteverifyResponse;
+    if (!result || typeof result.success !== "boolean") return { ok: false, reason: "verification-unavailable" };
   } catch {
     return { ok: false, reason: "verification-unavailable" };
   }
-  if (!response.ok) {
-    return { ok: false, reason: `siteverify-http-${response.status}` };
-  }
 
-  const result = (await response.json()) as SiteverifyResponse;
   if (result.success) {
     if (expectedHostname && result.hostname !== expectedHostname) {
       return { ok: false, reason: "hostname-mismatch" };

@@ -35,6 +35,7 @@ import type { ProductRepository } from "@/repositories/product-repository";
  */
 
 export type ProductServiceError =
+  | "RATE_LIMITED"
   | "NOT_FOUND"
   | "FORBIDDEN"
   | "INVALID_NAME"
@@ -142,26 +143,7 @@ export async function createProduct(input: {
     // insert. Try the next candidate.
     if (!created) continue;
 
-    // The opening rows of the audit trail. `fromValue` is null because there
-    // was no previous state — that is what makes a creation distinguishable
-    // from a transition when the timeline is read back.
-    await input.repository.recordStatusChange({
-      productId: created.id,
-      axis: "PUBLICATION",
-      fromValue: null,
-      toValue: "DRAFT",
-      actorId: input.ownerId,
-      actorRole: "OWNER",
-    });
-    await input.repository.recordStatusChange({
-      productId: created.id,
-      axis: "FAILURE",
-      fromValue: null,
-      toValue: input.failureStatus,
-      actorId: input.ownerId,
-      actorRole: "OWNER",
-    });
-
+    // Creation and its opening history are committed atomically by the repository.
     return created;
   }
 

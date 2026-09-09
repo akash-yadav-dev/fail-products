@@ -185,7 +185,9 @@ Minimum coverage:
 | sign-in request (send OTP / magic link) | DB counter, per email **and** per IP |
 | sign-in verification (submit OTP / token) | DB counter — attempt cap, then lock the token |
 | OAuth callback | WAF + `ratelimit` binding |
-| product submission | `ratelimit` binding, per user |
+| product submission | DB counter, per user — see below |
+| profile edit | DB counter, per user |
+| moderation action (hide, remove, resolve) | DB counter, per moderator |
 | comment posting | DB counter, per user — see below |
 | reports | DB counter, per user + Turnstile — see below |
 | waitlist signup | `ratelimit` binding + Turnstile |
@@ -193,13 +195,21 @@ Minimum coverage:
 | search | WAF + `ratelimit` binding |
 | waitlist CSV export | DB counter — bulk PII, also audit-logged |
 
-**Comment posting and reporting use the DB counter, not the binding.** The Workers
-`ratelimit` binding is what those two endpoints should eventually use, and the table above named
-it first. Nothing is deployed to Workers yet, so there is no binding to call and the real choice
-is the counted layer or no limit at all. Counted is the stricter of the two, the request already
-writes a row, and moving a rule back to the edge layer is a one-line change to
+**Comment posting, reporting, and product submission use the DB counter, not the binding.** The
+Workers `ratelimit` binding is what those endpoints should eventually use, and the table above
+named it first. Nothing is deployed to Workers yet, so there is no binding to call and the real
+choice is the counted layer or no limit at all. Counted is the stricter of the two, the request
+already writes a row, and moving a rule back to the edge layer is a one-line change to
 `RATE_LIMITS` in `src/services/security/rate-limit.ts`. Shipping the weaker option would have
 meant shipping none.
+
+**Profile edits and moderation actions are counted for a different reason.** Neither is a cost
+control. A profile edit is cheap, but the username it changes is stamped on every comment and
+every card, so an account cycling handles in a loop makes the public record of who said what
+unreadable. A moderation action is trusted — what stops a rogue moderator is the audit trail,
+not a counter — so its limit exists to bound the blast radius of a stolen or scripted moderator
+session, which can otherwise hide the whole directory as fast as the database answers. Both sit
+after the identity check, so a rejected actor never reaches the content.
 
 Every counted limit shares one table, `rate_limits`, with the rule name inside the hashed key so
 two limits can never share a counter. That sharing has one hazard worth naming: a sweep of

@@ -34,7 +34,7 @@ describe.skipIf(noDatabase)("passwordless authentication", () => {
       .from(authTokens)
       .where(eq(authTokens.email, email));
     expect(code).toBe("123456");
-    expect(row?.tokenHash).toBe(await sha256Base64Url(code));
+    expect(row?.tokenHash).toBe(await sha256Base64Url(`${email}:${code}`));
     expect(row?.tokenHash).not.toBe(code);
     expect(row?.consumedAt).toBeNull();
   });

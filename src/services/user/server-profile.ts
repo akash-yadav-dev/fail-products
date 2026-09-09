@@ -3,6 +3,9 @@ import { cache } from "react";
 
 import { getDb } from "@/db";
 import { UserRepository } from "@/repositories/user-repository";
+import { RateLimitRepository } from "@/repositories/rate-limit-repository";
+import { DatabaseRateLimiter, RATE_LIMITS } from "@/services/security/rate-limit";
+import { ProfileValidationError } from "@/services/user/profile-service";
 import {
   getPublicProfile as getPublicProfileUseCase,
   updateProfile as updateProfileUseCase,
@@ -25,9 +28,13 @@ export function getOwnProfile(userId: string) {
   return repository().findById(userId);
 }
 
-export function updateProfile(
+export async function updateProfile(
   input: Omit<Parameters<typeof updateProfileUseCase>[0], "repository">
 ) {
+  const limiter = new DatabaseRateLimiter(new RateLimitRepository(getDb()));
+  if (!(await limiter.consume(RATE_LIMITS.profileUpdate, input.userId)).allowed) {
+    throw new ProfileValidationError("RATE_LIMITED", "You have saved your profile frequently. Try again in ten minutes.");
+  }
   return updateProfileUseCase({ ...input, repository: repository() });
 }
 

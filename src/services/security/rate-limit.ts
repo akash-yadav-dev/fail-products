@@ -118,6 +118,68 @@ function asCountedRule(rule: RateLimitRule): CountedRule {
  */
 export const RATE_LIMITS = {
   /**
+   * Product submission, per account.
+   *
+   * The most expensive write an ordinary account can make: a listing carries a
+   * description `docs/PRODUCT.md` caps at 20,000 characters, plus two opening
+   * rows of status history, and it is metered storage that nothing reclaims.
+   * Authenticated abuse here grows the table and every query over it.
+   *
+   * Five an hour, because the honest ceiling is far lower. This site exists
+   * for founders filing their own products (CLAUDE.md §9, listings are
+   * owner-only), and a founder with six failed products to file in one hour is
+   * rare enough to be worth the wait; a script filing hundreds is the case
+   * this exists for.
+   */
+  productSubmit: {
+    name: "product-submit",
+    scope: "USER",
+    limit: 5,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Profile edits, per account.
+   *
+   * Cheap individually — one row, no new storage — so this is not a cost
+   * limit. It guards username churn: the handle appears on every comment and
+   * every listing card, and an account cycling through handles in a loop makes
+   * the public record of who said what unreadable, and any cached page that
+   * renders a username permanently wrong.
+   *
+   * Twenty in ten minutes leaves ordinary editing — fixing a typo, trying a
+   * few handles before settling — entirely unaffected.
+   */
+  profileUpdate: {
+    name: "profile-update",
+    scope: "USER",
+    limit: 20,
+    windowSeconds: 10 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Moderation writes, per moderator.
+   *
+   * Not an abuse limit in the usual sense — a moderator is trusted, and this
+   * is not what stops one going rogue; the audit trail is. It is a blast
+   * radius limit on a stolen or scripted moderator session, which can
+   * otherwise hide the entire directory as fast as the database answers.
+   *
+   * Sixty in ten minutes is well above a person working a queue steadily and
+   * well below a script clearing it. It sits deliberately after the role check
+   * and before the read, so a rejected actor never reaches the content.
+   */
+  moderationWrite: {
+    name: "moderation-write",
+    scope: "USER",
+    limit: 60,
+    windowSeconds: 10 * 60,
+    layer: "counted",
+  },
+
+  /**
    * Comment posting, per account.
    *
    * `SECURITY.md` §11 names the Workers `ratelimit` binding for this endpoint.
