@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
+import { RateLimitRepository } from "@/repositories/rate-limit-repository";
+import { DatabaseRateLimiter, RATE_LIMITS } from "@/services/security/rate-limit";
+import { ProductError } from "@/services/product/product-service";
 import {
   changeFailureStatus as changeFailureStatusUseCase,
   changeModerationState as changeModerationStateUseCase,
@@ -28,9 +31,13 @@ function repository() {
 
 type Without<T> = Omit<T, "repository">;
 
-export function createProduct(
+export async function createProduct(
   input: Without<Parameters<typeof createProductUseCase>[0]>
 ) {
+  const limiter = new DatabaseRateLimiter(new RateLimitRepository(getDb()));
+  if (!(await limiter.consume(RATE_LIMITS.productSubmit, input.ownerId)).allowed) {
+    throw new ProductError("RATE_LIMITED");
+  }
   return createProductUseCase({ ...input, repository: repository() });
 }
 

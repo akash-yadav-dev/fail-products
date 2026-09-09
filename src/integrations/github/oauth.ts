@@ -18,6 +18,7 @@ export function githubAuthorizeUrl(input: { clientId: string; redirectUri: strin
 export async function exchangeGithubCode(input: { clientId: string; clientSecret: string; code: string; redirectUri: string; verifier: string; fetchImpl?: typeof fetch }): Promise<string | null> {
   const fetchImpl = input.fetchImpl ?? fetch;
   const response = await fetchImpl("https://github.com/login/oauth/access_token", {
+    signal: AbortSignal.timeout(10_000),
     method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ client_id: input.clientId, client_secret: input.clientSecret, code: input.code, redirect_uri: input.redirectUri, code_verifier: input.verifier }),
   });
@@ -27,10 +28,10 @@ export async function exchangeGithubCode(input: { clientId: string; clientSecret
 
 export async function fetchGithubProfile(accessToken: string, fetchImpl: typeof fetch = fetch): Promise<GithubProfile | null> {
   const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${accessToken}` };
-  const userResponse = await fetchImpl("https://api.github.com/user", { headers });
+  const userResponse = await fetchImpl("https://api.github.com/user", { headers, signal: AbortSignal.timeout(10_000) });
   if (!userResponse.ok) return null;
   const user = (await userResponse.json()) as GithubUserResponse;
-  const emailsResponse = await fetchImpl("https://api.github.com/user/emails", { headers });
+  const emailsResponse = await fetchImpl("https://api.github.com/user/emails", { headers, signal: AbortSignal.timeout(10_000) });
   if (!emailsResponse.ok) return { id: String(user.id), email: null, displayName: user.name ?? user.login ?? null };
   const emails = (await emailsResponse.json()) as GithubEmailResponse;
   const email = emails.find((entry) => entry.primary && entry.verified)?.email ?? emails.find((entry) => entry.verified)?.email ?? null;

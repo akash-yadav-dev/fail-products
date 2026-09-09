@@ -5,7 +5,6 @@ import type { Database } from "@/db";
 import { publiclyVisibleComment } from "@/db/queries/comment-visibility";
 import { publiclyVisibleProduct } from "@/db/queries/product-visibility";
 import { comments, products, users } from "@/db/schema";
-import type { CommentModerationState } from "@/domain/comment/moderation";
 
 /**
  * Comment persistence.
@@ -174,13 +173,14 @@ export class CommentRepository {
     return row ?? null;
   }
 
-  async setModerationState(id: string, to: CommentModerationState) {
-    await this.db
-      .update(comments)
-      .set({ moderationState: to })
-      .where(eq(comments.id, id));
-  }
-
+  // Deleted: `setModerationState`. Moderating a comment now goes through
+  // `ReportRepository.applyCommentModeration`, which moves the state, writes
+  // the audit row, and closes the reports in one statement. This left the
+  // unconditional half of that available on its own — a caller could change
+  // the state and lose the audit row to the next failure, which is the exact
+  // ordering the atomic version exists to make impossible. It also never
+  // touched `updated_at`.
+  //
   // Deleted: `listByModerationState`. It shipped with Phase 3 and never had a
   // caller — the queue reads `reports`, not comments by state — and it
   // filtered `comments.moderation_state`, which carries no index, so the

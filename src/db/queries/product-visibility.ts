@@ -24,3 +24,20 @@ export const publiclyVisibleProduct: SQL = and(
     eq(products.moderationState, "FLAGGED")
   )
 )!;
+
+/**
+ * The weaker predicate: a listing the public has been shown, whatever a
+ * moderator has since done to it.
+ *
+ * `publiclyVisibleProduct` answers "may this be rendered now". This answers
+ * "was this ever public", and the two must not be confused. A listing that is
+ * HIDDEN or REMOVED still has to be reachable by the report and appeal path —
+ * `docs/MODERATION.md` §10 promises an appeal, and an appeal filed against a
+ * takedown is filed after the takedown. Filtering that path on present
+ * visibility drops exactly the reports the appeal is about.
+ *
+ * What it still excludes is a listing that was never published. A DRAFT is
+ * private to its owner, so a lookup that confirms one exists — or reveals the
+ * slug it was renamed to — is an enumeration oracle, not an appeal.
+ */
+export const publishedProduct: SQL = eq(products.publicationState, "PUBLISHED");

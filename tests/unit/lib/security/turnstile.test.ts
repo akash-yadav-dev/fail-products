@@ -28,6 +28,18 @@ function respondWith(
 const SECRET = "test-secret-not-a-real-key";
 
 describe("verifyTurnstileToken", () => {
+  it("returns a safe rejection for malformed provider JSON", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not json")) as typeof fetch;
+    await expect(verifyTurnstileToken("token", { secret: SECRET, fetchImpl }))
+      .resolves.toEqual({ ok: false, reason: "verification-unavailable" });
+  });
+
+  it("rejects an oversized token before contacting the provider", async () => {
+    const fetchImpl = respondWith({ success: true });
+    expect((await verifyTurnstileToken("x".repeat(2049), { secret: SECRET, fetchImpl })).ok).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("accepts a token Cloudflare confirms", async () => {
     const result = await verifyTurnstileToken("token", {
       secret: SECRET,

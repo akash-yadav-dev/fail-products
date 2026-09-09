@@ -11,6 +11,7 @@ import type { UserRepository } from "@/repositories/user-repository";
  */
 
 export type ProfileError =
+  | "RATE_LIMITED"
   | "NOT_FOUND"
   | "USERNAME_INVALID"
   | "USERNAME_TAKEN"

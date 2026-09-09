@@ -141,6 +141,16 @@ describe.skipIf(noDatabase)("product service", () => {
       const created = await make(ownerId, `Before ${unique("r")}`);
       const originalSlug = created.slug;
 
+      // Published first, because the redirect ADR-019 protects is the one
+      // search engines and inbound links follow, and both only ever saw a
+      // published listing.
+      await changePublicationState({
+        repository: repository!,
+        viewer: { userId: ownerId },
+        productId: created.id,
+        to: "PUBLISHED",
+      });
+
       const renamed = await updateProduct({
         repository: repository!,
         viewer: { userId: ownerId },
@@ -153,6 +163,28 @@ describe.skipIf(noDatabase)("product service", () => {
       // The old URL still resolves — to a redirect, not a 404.
       const resolved = await resolvePublicProduct(repository!, originalSlug);
       expect(resolved).toEqual({ kind: "moved", slug: renamed.slug });
+    });
+
+    it("does not redirect a retired slug belonging to an unpublished draft", async () => {
+      // A draft was never public, so neither of its slugs is. Answering
+      // "moved, and here is the new one" would confirm the listing exists and
+      // hand over the slug it was renamed to — an enumeration oracle built out
+      // of a redirect. A draft's old URL is simply missing, like its new one.
+      const ownerId = await owner();
+      const created = await make(ownerId, `Draft ${unique("r")}`);
+      const originalSlug = created.slug;
+
+      const renamed = await updateProduct({
+        repository: repository!,
+        viewer: { userId: ownerId },
+        productId: created.id,
+        name: `Draft renamed ${unique("r")}`,
+      });
+
+      expect(renamed.slug).not.toBe(originalSlug);
+      expect(await resolvePublicProduct(repository!, originalSlug)).toEqual({
+        kind: "missing",
+      });
     });
 
     it("refuses to reissue a retired slug to another product", async () => {
