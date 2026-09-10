@@ -78,9 +78,8 @@ export async function moderateProductAction(
 
     revalidatePath("/products/" + result.slug);
     // Related cards, share images, and sitemap entries also disclose the listing.
-    // Route groups never reach a cache tag — Next strips them when it derives
-    // the implicit tags — so this is the URL path, not the folder path.
-    revalidatePath("/products", "layout");
+    // The installed build's .meta files include the route group in layout tags.
+    revalidatePath("/(site)/products", "layout");
     revalidatePath("/sitemap.xml");
     revalidatePath("/dashboard/moderation");
 
@@ -95,6 +94,7 @@ export async function moderateProductAction(
     // `docs/DEPLOYMENT.md` §11 makes launch-blocking.
     if (result.categorySlug) {
       revalidatePath("/categories/" + result.categorySlug);
+      revalidatePath("/categories");
     }
     revalidatePath("/status/" + findFailureStatus(result.failureStatus).slug);
 
