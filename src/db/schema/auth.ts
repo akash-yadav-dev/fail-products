@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   integer,
   index,
@@ -25,6 +26,9 @@ export const authTokens = pgTable(
   (table) => [
     uniqueIndex("auth_tokens_token_hash_key").on(table.tokenHash),
     index("auth_tokens_email_created_idx").on(table.email, table.createdAt),
+    // Bounded cleanup must find expired/consumed rows without scanning live tokens.
+    index("auth_tokens_expiry_idx").on(table.expiresAt),
+    index("auth_tokens_consumed_idx").on(table.id).where(sql`${table.consumedAt} IS NOT NULL`),
   ]
 );
 
@@ -44,6 +48,8 @@ export const sessions = pgTable(
   },
   (table) => [
     uniqueIndex("sessions_token_hash_key").on(table.tokenHash),
+    index("sessions_expiry_idx").on(table.expiresAt),
+    index("sessions_revoked_idx").on(table.id).where(sql`${table.revokedAt} IS NOT NULL`),
   ]
 );
 

@@ -92,6 +92,13 @@
       "when": 1788437098163,
       "tag": "0012_little_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788950469487,
+      "tag": "0013_auth_cleanup_indexes",
+      "breakpoints": true
     }
   ]
 }
