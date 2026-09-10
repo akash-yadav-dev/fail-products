@@ -1,0 +1,35 @@
+# Automated dependency version updates. Distinct from Dependabot security
+# updates (enabled separately in repo settings, no config needed here) --
+# this file is for routine version bumps, not vulnerability response.
+#
+# Targets dev, not main: dev is the integration branch every change goes
+# through first. CLAUDE.md section 2, .github/BRANCH-PROTECTION.md.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor bumps land together, one PR to review instead of
+      # a dozen. A major bump stays isolated -- it's the one that can
+      # actually break something.
+      routine:
+        update-types: ["patch", "minor"]
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
