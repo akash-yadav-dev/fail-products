@@ -23,6 +23,12 @@ const WORDMARK_SIZES = {
   lg: "text-2xl sm:text-3xl",
 } as const;
 
+const IMAGE_SIZES = {
+  sm: "32px",
+  md: "(min-width: 640px) 40px, 36px",
+  lg: "(min-width: 640px) 80px, 64px",
+} as const;
+
 export function SiteLogo({
   size = "md",
   withWordmark = true,
@@ -43,7 +49,7 @@ export function SiteLogo({
         width={160}
         height={160}
         priority={priority}
-        sizes="80px"
+        sizes={IMAGE_SIZES[size]}
         className={cn("rounded-lg object-contain", MARK_SIZES[size])}
       />
       {withWordmark ? (
