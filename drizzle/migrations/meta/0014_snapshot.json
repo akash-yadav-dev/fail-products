@@ -1,6 +1,6 @@
 {
-  "id": "8cfc26db-f6f9-4486-96b6-b5beacad1927",
-  "prevId": "c1805ea7-e64e-452c-b026-0e525c3d2756",
+  "id": "fd4ba017-1ff1-485e-998e-8f93596d6908",
+  "prevId": "2f2e7454-29f2-4d09-ba73-1dcf0ba66300",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -190,6 +190,37 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "auth_tokens_expiry_idx": {
+          "name": "auth_tokens_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "auth_tokens_consumed_idx": {
+          "name": "auth_tokens_consumed_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"auth_tokens\".\"consumed_at\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -266,6 +297,37 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sessions_expiry_idx": {
+          "name": "sessions_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sessions_revoked_idx": {
+          "name": "sessions_revoked_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"sessions\".\"revoked_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
