@@ -1,9 +1,14 @@
 // src/services/product/server-product.ts
 import { revalidatePath } from "next/cache";
+import { cache } from "react";
 
 import { getDb } from "@/db";
+import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
+import { RateLimitRepository } from "@/repositories/rate-limit-repository";
+import { DatabaseRateLimiter, RATE_LIMITS } from "@/services/security/rate-limit";
+import { ProductError } from "@/services/product/product-service";
 import {
   changeFailureStatus as changeFailureStatusUseCase,
   changeModerationState as changeModerationStateUseCase,
@@ -11,6 +16,7 @@ import {
   createProduct as createProductUseCase,
   listPublicDirectory as listPublicDirectoryUseCase,
   resolvePublicProduct as resolvePublicProductUseCase,
+  setWaitlistEnabled as setWaitlistEnabledUseCase,
   updateProduct as updateProductUseCase,
 } from "@/services/product/product-service";
 
@@ -28,9 +34,29 @@ function repository() {
 
 type Without<T> = Omit<T, "repository">;
 
-export function createProduct(
+type ProductSnapshot = Awaited<ReturnType<ProductRepository["findForAuthorization"]>>;
+
+/** Invalidate all public projections of both versions, after a successful mutation. */
+function invalidateProductChange(before: ProductSnapshot, after: ProductSnapshot) {
+  // A product can also appear on another product's related cards and OG image.
+  revalidatePath("/(site)/products", "layout");
+  const paths = new Set(["/products", "/categories", "/sitemap.xml"]);
+  for (const product of [before, after]) {
+    if (!product) continue;
+    paths.add(`/products/${product.slug}`);
+    if (product.categorySlug) paths.add(`/categories/${product.categorySlug}`);
+    paths.add(`/status/${findFailureStatus(product.failureStatus as FailureStatus).slug}`);
+  }
+  for (const path of paths) revalidatePath(path);
+}
+
+export async function createProduct(
   input: Without<Parameters<typeof createProductUseCase>[0]>
 ) {
+  const limiter = new DatabaseRateLimiter(new RateLimitRepository(getDb()));
+  if (!(await limiter.consume(RATE_LIMITS.productSubmit, input.ownerId)).allowed) {
+    throw new ProductError("RATE_LIMITED");
+  }
   return createProductUseCase({ ...input, repository: repository() });
 }
 
@@ -56,38 +82,78 @@ export async function updateProduct(
     repository: repository(),
   });
 
-  revalidatePath(`/products/${result.slug}`);
-  if (before && before.slug !== result.slug) {
-    revalidatePath(`/products/${before.slug}`);
-  }
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
 
   return result;
 }
 
-export function changePublicationState(
+/**
+ * Toggles a product's waitlist, and invalidates the page that changed.
+ *
+ * `/products/[slug]` is prerendered with a five-minute window (ADR-027), and
+ * the join form is part of that HTML. Without this, a founder who switches the
+ * waitlist on watches the page not gain a form, and — worse — one who switches
+ * it off keeps serving a form that collects addresses the action then refuses.
+ * The exact path, not a blanket invalidation.
+ */
+export async function setWaitlistEnabled(
+  input: Without<Parameters<typeof setWaitlistEnabledUseCase>[0]>
+) {
+  const result = await setWaitlistEnabledUseCase({
+    ...input,
+    repository: repository(),
+  });
+
+  revalidatePath(`/products/${result.slug}`);
+
+  return result;
+}
+
+export async function changePublicationState(
   input: Without<Parameters<typeof changePublicationStateUseCase>[0]>
 ) {
-  return changePublicationStateUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changePublicationStateUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function changeModerationState(
+export async function changeModerationState(
   input: Without<Parameters<typeof changeModerationStateUseCase>[0]>
 ) {
-  return changeModerationStateUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changeModerationStateUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function changeFailureStatus(
+export async function changeFailureStatus(
   input: Without<Parameters<typeof changeFailureStatusUseCase>[0]>
 ) {
-  return changeFailureStatusUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changeFailureStatusUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function resolvePublicProduct(slug: string) {
+// Metadata and body share this read within a render, never across requests.
+export const resolvePublicProduct = cache((slug: string) => {
   return resolvePublicProductUseCase(repository(), slug);
-}
+});
 
 export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);
+}
+
+/**
+ * What a moderator recorded about each of this owner's listings, if anything.
+ *
+ * Read alongside the listings rather than joined into them: most owners have
+ * no moderation history at all, and this keeps the common case one plain
+ * query over `products`.
+ */
+export function listOwnedModerationNotices(ownerId: string) {
+  return repository().latestModerationByOwner(ownerId);
 }
 
 /**

@@ -294,37 +294,44 @@ jobs:
         run: pnpm build
 
       - name: Audit production dependencies
+        # A runaway guard only. The loop below bounds itself to about two
+        # minutes, so this can never fire in normal operation -- which matters,
+        # because a step timeout FAILS the job, and failing on an npm outage is
+        # the exact behaviour this whole step exists to avoid. The previous
+        # version set it to 4 minutes and fired it, turning a tolerated outage
+        # back into a blocked merge.
+        timeout-minutes: 10
         run: |
           # `pnpm audit` exits non-zero for two unrelated reasons: it found an
           # advisory, or it could not reach the advisory service. Only the
-          # first is a reason to stop a release.
+          # first is a reason to stop a release. An outage at npm is not
+          # evidence of a vulnerability here, and treating it as one teaches
+          # people to re-run a red pipeline until it goes green -- which is
+          # also how a genuine finding gets clicked past.
           #
-          # The promotion pull request failed on the second: three POSTs to
-          # registry.npmjs.org timed out over five minutes, and the job reported
-          # the same red as a real vulnerability would. An outage at npm is not
-          # evidence of a vulnerability in this project, and treating it as one
-          # teaches people to re-run a red pipeline until it turns green, which
-          # is how a genuine finding gets clicked past.
+          # Each attempt is bounded with `timeout` rather than by asking pnpm
+          # to bound itself. `npm_config_fetch_retries=0` and
+          # `npm_config_fetch_timeout` were tried and measured: attempts still
+          # took 123s and 82s against a dead registry, so pnpm does not apply
+          # them to the advisories request. `timeout` is not a request.
           #
-          # So: retry like the pnpm download above, then separate the two cases
-          # by what the output says. A real result is honoured, whatever it
-          # says. An unreachable service is a warning, and the audit is recorded
-          # as not run rather than as passed.
+          # Exit 124 is what `timeout` returns when it kills the command, and
+          # it means the same thing here as a connection error: no answer.
           UNREACHABLE='TimeoutError|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|socket hang up|error \(2[0-9]\)|Will retry in'
 
           set +e
           for attempt in 1 2 3; do
-            OUT="$(pnpm audit --prod --audit-level=moderate 2>&1)"
+            OUT="$(timeout 30s pnpm audit --prod --audit-level=moderate 2>&1)"
             CODE=$?
 
-            if ! printf '%s' "$OUT" | grep -qE "$UNREACHABLE"; then
+            if [ "$CODE" -ne 124 ] && ! printf '%s' "$OUT" | grep -qE "$UNREACHABLE"; then
               set -e
               printf '%s\n' "$OUT"
               exit $CODE
             fi
 
             echo "::warning::advisory service unreachable (attempt $attempt of 3); retrying"
-            sleep $((attempt * 15))
+            sleep $((attempt * 10))
           done
           set -e
 

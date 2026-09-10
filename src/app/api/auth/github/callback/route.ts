@@ -20,14 +20,13 @@ function failureResponse() {
 }
 
 function cookieValue(request: Request, name: string) {
-  return request.headers.get("cookie")?.match(new RegExp(`${name}=([^;]+)`))?.[1];
+  return request.headers.get("cookie")?.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
 }
 
 export async function GET(request: Request) {
   const config = authConfig();
   if (!config.siteUrl || !config.githubClientId || !config.githubClientSecret) return failureResponse();
-  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-  if (!(await consumeOauthCallbackLimit(ip)).allowed) return failureResponse();
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -35,6 +34,8 @@ export async function GET(request: Request) {
   const verifierCookie = cookieValue(request, VERIFIER_COOKIE);
   if (!code || !state || !stateCookie || !verifierCookie || !constantTimeEqual(state, stateCookie)) return failureResponse();
   try {
+    const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+    if (!(await consumeOauthCallbackLimit(ip)).allowed) return failureResponse();
     const redirectUri = new URL("/api/auth/github/callback", config.siteUrl).toString();
     const accessToken = await exchangeGithubCode({ clientId: config.githubClientId, clientSecret: config.githubClientSecret, code, redirectUri, verifier: verifierCookie });
     if (!accessToken) return failureResponse();

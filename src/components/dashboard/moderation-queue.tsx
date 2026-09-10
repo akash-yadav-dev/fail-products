@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +112,10 @@ function QueueRow({
     resolveReportAction,
     null
   );
+  // Removal takes down a named business's public page, from a button sitting
+  // beside two reversible ones, and the queue offers no undo once an actioned
+  // entry leaves it. A required reason is a record, not a confirmation.
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
 
   const reason = findReportReason(entry.reason as ReportReason);
   const currentState =
@@ -163,12 +167,30 @@ function QueueRow({
 
       <CardContent className="flex flex-col gap-4">
         {entry.targetType === "COMMENT" && entry.commentBody ? (
-          // Same reason as the comment body: this is the reported text
-          // verbatim, so an unbroken URL would scroll the moderator queue
-          // sideways on a phone.
-          <blockquote className="border-l-2 pl-3 text-sm whitespace-pre-line text-muted-foreground wrap-anywhere">
-            {entry.commentBody}
-          </blockquote>
+          <div className="flex flex-col gap-2">
+            {/*
+              Same reason as the comment body: this is the reported text
+              verbatim, so an unbroken URL would scroll the moderator queue
+              sideways on a phone.
+            */}
+            <blockquote className="border-l-2 pl-3 text-sm whitespace-pre-line text-muted-foreground wrap-anywhere">
+              {entry.commentBody}
+            </blockquote>
+
+            {/*
+              Most of what decides a borderline harassment call is the thread
+              around the fragment, not the fragment. The anchor is the comment
+              id, set on the list item in comment-list.tsx.
+            */}
+            {entry.productSlug && entry.commentId ? (
+              <Link
+                href={`/products/${entry.productSlug}#${entry.commentId}`}
+                className="w-fit rounded-sm text-sm underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                Read it in context
+              </Link>
+            ) : null}
+          </div>
         ) : null}
 
         <form action={formAction} className="flex flex-col gap-3">
@@ -202,6 +224,15 @@ function QueueRow({
             </Alert>
           ) : null}
 
+          {confirmingRemoval ? (
+            <p className="text-sm text-pretty">
+              This takes the{" "}
+              {entry.targetType === "COMMENT" ? "comment" : "listing"} down and
+              it stops being public. There is no undo in this queue: an
+              actioned entry leaves it.
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
             {entry.targetType === "COMMENT" ? (
               <>
@@ -215,16 +246,38 @@ function QueueRow({
                 >
                   Hide comment
                 </Button>
-                <Button
-                  type="submit"
-                  name="to"
-                  value="REMOVED"
-                  variant="destructive"
-                  disabled={pending}
-                  className="h-10"
-                >
-                  Remove comment
-                </Button>
+                {confirmingRemoval ? (
+                  <>
+                    <Button
+                      type="submit"
+                      name="to"
+                      value="REMOVED"
+                      variant="destructive"
+                      disabled={pending}
+                      className="h-10"
+                    >
+                      Confirm removal
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10"
+                      onClick={() => setConfirmingRemoval(false)}
+                    >
+                      Keep it
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={pending}
+                    className="h-10"
+                    onClick={() => setConfirmingRemoval(true)}
+                  >
+                    Remove comment
+                  </Button>
+                )}
               </>
             ) : (
               <>
@@ -248,16 +301,38 @@ function QueueRow({
                 >
                   Hide listing
                 </Button>
-                <Button
-                  type="submit"
-                  name="to"
-                  value="REMOVED"
-                  variant="destructive"
-                  disabled={pending}
-                  className="h-10"
-                >
-                  Remove listing
-                </Button>
+                {confirmingRemoval ? (
+                  <>
+                    <Button
+                      type="submit"
+                      name="to"
+                      value="REMOVED"
+                      variant="destructive"
+                      disabled={pending}
+                      className="h-10"
+                    >
+                      Confirm removal
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10"
+                      onClick={() => setConfirmingRemoval(false)}
+                    >
+                      Keep it
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={pending}
+                    className="h-10"
+                    onClick={() => setConfirmingRemoval(true)}
+                  >
+                    Remove listing
+                  </Button>
+                )}
               </>
             )}
           </div>

@@ -35,6 +35,7 @@ import type { ProductRepository } from "@/repositories/product-repository";
  */
 
 export type ProductServiceError =
+  | "RATE_LIMITED"
   | "NOT_FOUND"
   | "FORBIDDEN"
   | "INVALID_NAME"
@@ -142,26 +143,7 @@ export async function createProduct(input: {
     // insert. Try the next candidate.
     if (!created) continue;
 
-    // The opening rows of the audit trail. `fromValue` is null because there
-    // was no previous state — that is what makes a creation distinguishable
-    // from a transition when the timeline is read back.
-    await input.repository.recordStatusChange({
-      productId: created.id,
-      axis: "PUBLICATION",
-      fromValue: null,
-      toValue: "DRAFT",
-      actorId: input.ownerId,
-      actorRole: "OWNER",
-    });
-    await input.repository.recordStatusChange({
-      productId: created.id,
-      axis: "FAILURE",
-      fromValue: null,
-      toValue: input.failureStatus,
-      actorId: input.ownerId,
-      actorRole: "OWNER",
-    });
-
+    // Creation and its opening history are committed atomically by the repository.
     return created;
   }
 
@@ -227,6 +209,40 @@ export async function updateProduct(input: {
   // Keep the existing slug rather than failing the edit. The name change is
   // still saved; the URL simply does not follow it.
   return { id: input.productId, slug: product.slug };
+}
+
+/**
+ * Turns a product's waitlist on or off (Phase 4 slice 4.1).
+ *
+ * Owner-only, authorised the way `AGENTS.md` §7 requires: the product is
+ * re-loaded server-side and compared against the session's viewer, never
+ * against an owner id that arrived with the request.
+ *
+ * **Not recorded on the status timeline.** `product_status_history` covers the
+ * three axes ADR-013 defines, and this is none of them — a waitlist switch says
+ * nothing about whether the listing is public, what a moderator did, or what
+ * happened to the product. Writing it there would put a fourth kind of event
+ * into a table whose `axis` enum cannot describe it.
+ *
+ * Returns the slug so the caller can invalidate the exact page that changed.
+ */
+export async function setWaitlistEnabled(input: {
+  repository: ProductRepository;
+  viewer: Viewer;
+  productId: string;
+  enabled: boolean;
+}) {
+  const product = await input.repository.findForAuthorization(input.productId);
+  if (!product) throw new ProductError("NOT_FOUND");
+  authorize(input.viewer, "edit", product);
+
+  const [row] = await input.repository.setWaitlistEnabled(
+    input.productId,
+    input.enabled
+  );
+  if (!row) throw new ProductError("NOT_FOUND");
+
+  return { id: row.id, slug: row.slug, waitlistEnabled: input.enabled };
 }
 
 /** Owner-driven publication change, recorded on the timeline. */

@@ -1,5 +1,6 @@
 import type { AuthRepository } from "@/repositories/auth-repository";
-import { constantTimeEqual, generateOtp, generateSessionToken, isValidEmail, normalizeEmail, sha256Base64Url } from "@/lib/auth/crypto";
+import { constantTimeEqual, generateOtp, generateSessionToken, sha256Base64Url } from "@/lib/auth/crypto";
+import { isValidEmail, normalizeEmail } from "@/lib/validation/email";
 import { consumeDatabaseLimit } from "@/services/auth/rate-limit";
 
 export const OTP_TTL_SECONDS = 10 * 60;
@@ -25,11 +26,11 @@ export async function requestEmailCode(input: { repository: AuthRepository; emai
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, reason: "invalid-email" };
   const now = input.now ?? Date.now();
-  await input.repository.cleanupAuthData(now);
   const [emailLimit, ipLimit] = await Promise.all([consumeDatabaseLimit(input.repository, REQUEST_LIMIT, email, now), consumeDatabaseLimit(input.repository, IP_REQUEST_LIMIT, input.ipAddress, now)]);
   if (!emailLimit.allowed || !ipLimit.allowed) return { ok: false, reason: "rate-limited" };
+  await input.repository.cleanupAuthData(now);
   const code = input.generateCode?.() ?? generateOtp();
-  await input.repository.insertToken({ email, tokenHash: await sha256Base64Url(code), expiresAt: new Date(now + OTP_TTL_SECONDS * 1000) });
+  await input.repository.insertToken({ email, tokenHash: await sha256Base64Url(`${email}:${code}`), expiresAt: new Date(now + OTP_TTL_SECONDS * 1000) });
   try { await input.sendOtp({ email, code }); } catch { /* Keep account existence opaque when delivery fails. */ }
   return { ok: true };
 }
@@ -38,18 +39,22 @@ export async function verifyEmailCode(input: { repository: AuthRepository; email
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email) || !/^\d{6}$/.test(input.code)) return { ok: false, reason: "invalid-code" };
   const now = input.now ?? Date.now();
-  await input.repository.cleanupAuthData(now);
   const [emailLimit, ipLimit] = await Promise.all([consumeDatabaseLimit(input.repository, VERIFY_EMAIL_LIMIT, email, now), consumeDatabaseLimit(input.repository, VERIFY_IP_LIMIT, input.ipAddress, now)]);
   if (!emailLimit.allowed || !ipLimit.allowed) return { ok: false, reason: "rate-limited" };
+  await input.repository.cleanupAuthData(now);
   const active = await input.repository.findActiveTokens(email, now, MAX_TOKEN_ATTEMPTS);
-  const submittedHash = await sha256Base64Url(input.code);
+  const submittedHash = await sha256Base64Url(`${email}:${input.code}`);
   let matchedId: string | undefined;
   for (const candidate of active) if (constantTimeEqual(submittedHash, candidate.tokenHash) && !matchedId) matchedId = candidate.id;
-  if (!matchedId) { if (active[0]) await input.repository.incrementTokenAttempt(active[0].id, now, MAX_TOKEN_ATTEMPTS); return { ok: false, reason: "invalid-code" }; }
+  if (!matchedId) { if (active[0]) await input.repository.incrementTokenAttempt(email, now, MAX_TOKEN_ATTEMPTS); return { ok: false, reason: "invalid-code" }; }
   const [consumed] = await input.repository.consumeToken(matchedId, now, MAX_TOKEN_ATTEMPTS);
   if (!consumed) return { ok: false, reason: "invalid-code" };
   let [user] = await input.repository.findUserByEmail(email);
-  if (!user) { await input.repository.createUser({ email }); [user] = await input.repository.findUserByEmail(email); }
+  if (!user) {
+    [user] = await input.repository.createUser({ email });
+    // A concurrent first sign-in may win the unique-email insert.
+    if (!user) [user] = await input.repository.findUserByEmail(email);
+  }
   if (!user) return { ok: false, reason: "invalid-code" };
   return { ok: true, sessionToken: await createSession(input.repository, user.id, now), userId: user.id };
 }
@@ -61,8 +66,9 @@ export async function signInWithGithub(input: { repository: AuthRepository; prof
   const email = input.profile.email ? normalizeEmail(input.profile.email) : null;
   if (!userId && email && isValidEmail(email)) userId = (await input.repository.findUserByEmail(email))[0]?.id;
   if (!userId) {
-    await input.repository.createUser({ email: email && isValidEmail(email) ? email : null, displayName: input.profile.displayName });
-    if (email && isValidEmail(email)) userId = (await input.repository.findUserByEmail(email))[0]?.id;
+    const [created] = await input.repository.createUser({ email: email && isValidEmail(email) ? email : null, displayName: input.profile.displayName?.slice(0, 80) });
+    userId = created?.id;
+    if (!userId && email && isValidEmail(email)) userId = (await input.repository.findUserByEmail(email))[0]?.id;
   }
   if (!userId) return null;
   if (!account) {

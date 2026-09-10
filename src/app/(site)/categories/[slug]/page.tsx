@@ -98,9 +98,17 @@ export default async function CategoryPage({
           Where the parameters went. The deeper browse — sort, page two, a
           search inside the category — is one navigation away, on the route
           that carries query strings.
+
+          Rendered only when the page is actually truncated. Offering to
+          "browse every listing" under a category holding three of them
+          promised a fuller list that does not exist, and the page said
+          nothing about being a partial view in the first place.
         */}
-        {page.items.length > 0 ? (
-          <div className="flex justify-center">
+        {page.truncated ? (
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              Showing the newest {page.items.length}.
+            </p>
             <Button asChild variant="outline" className="h-11">
               <Link href={`/products?category=${category.slug}`}>
                 Browse and sort every {category.name} listing

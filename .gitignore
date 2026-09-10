@@ -23,3 +23,6 @@ dist/
 /playwright-report/
 /blob-report/
 /.playwright/
+
+# Audit tool output is regenerated on demand; only the written report is kept.
+audit-reports/*.log

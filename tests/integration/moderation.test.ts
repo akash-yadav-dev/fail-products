@@ -742,4 +742,150 @@ describe.skipIf(noDatabase)("reporting and moderation", () => {
 
     expect(queue.items.map((item) => item.id)).toContain(filed.id);
   });
+
+  // -------------------------------------------------------------------------
+  // What the owner is told
+  // -------------------------------------------------------------------------
+
+  it("tells the owner what was done to their listing, and why", async () => {
+    // The owner used to get a one-word badge in a column that disappears
+    // below 768px, and never the reason a moderator was required to record.
+    // `docs/MODERATION.md` §10 promises an appeal path, and an appeal is
+    // heard against a reason the appellant can read.
+    const listing = await product();
+    const dependencies = deps();
+    const moderator = await account("MODERATOR");
+
+    await moderateProduct({
+      ...dependencies,
+      viewer: { userId: moderator },
+      productId: listing.id,
+      to: "HIDDEN",
+      reason: "Unverifiable claims about a named competitor.",
+    });
+
+    const notices = await dependencies.products.latestModerationByOwner(
+      listing.ownerId!
+    );
+    const notice = notices.find((entry) => entry.productId === listing.id);
+
+    expect(notice).toBeDefined();
+    expect(notice!.toValue).toBe("HIDDEN");
+    expect(notice!.reason).toBe(
+      "Unverifiable claims about a named competitor."
+    );
+    expect(notice!.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("shows the owner the latest moderation entry, not the first", async () => {
+    // A listing flagged and then hidden must not keep telling its owner it
+    // was flagged. DISTINCT ON returns one row per product, and which row it
+    // is is decided by the ORDER BY — the part that silently breaks.
+    const listing = await product();
+    const dependencies = deps();
+    const moderator = await account("MODERATOR");
+
+    await moderateProduct({
+      ...dependencies,
+      viewer: { userId: moderator },
+      productId: listing.id,
+      to: "FLAGGED",
+      reason: "Worth a second look.",
+    });
+
+    await moderateProduct({
+      ...dependencies,
+      viewer: { userId: moderator },
+      productId: listing.id,
+      to: "HIDDEN",
+      reason: "Confirmed after review.",
+    });
+
+    const notices = await dependencies.products.latestModerationByOwner(
+      listing.ownerId!
+    );
+    const notice = notices.find((entry) => entry.productId === listing.id);
+
+    expect(notice!.toValue).toBe("HIDDEN");
+    expect(notice!.reason).toBe("Confirmed after review.");
+  });
+
+  it("tells one owner nothing about another owner's listings", async () => {
+    const mine = await product();
+    const theirs = await product();
+    const dependencies = deps();
+    const moderator = await account("MODERATOR");
+
+    await moderateProduct({
+      ...dependencies,
+      viewer: { userId: moderator },
+      productId: theirs.id,
+      to: "REMOVED",
+      reason: "Not the owner's product.",
+    });
+
+    const notices = await dependencies.products.latestModerationByOwner(
+      mine.ownerId!
+    );
+
+    expect(notices.map((entry) => entry.productId)).not.toContain(theirs.id);
+  });
+
+  it("returns the category and status a takedown has to invalidate", async () => {
+    // moderateProduct returns these so the action can revalidate the list
+    // pages that still render the removed listing's card. Without them a
+    // takedown leaves the card on /categories/<slug> and /status/<slug> for
+    // the five minutes ADR-027 caches them.
+    const listing = await product();
+    const dependencies = deps();
+
+    const result = await moderateProduct({
+      ...dependencies,
+      viewer: { userId: await account("MODERATOR") },
+      productId: listing.id,
+      to: "REMOVED",
+      reason: "Reported and confirmed.",
+    });
+
+    expect(result.slug).toBe(listing.slug);
+    expect(result.failureStatus).toBe("ABANDONED");
+    // Null is a legitimate answer: a product need not have a category.
+    expect(result).toHaveProperty("categorySlug");
+  });
+  it.each(["DRAFT", "ARCHIVED"] as const)("refuses reports against a %s listing", async (publicationState) => {
+    const listing = await product({ publicationState });
+    await expect(fileReport({ ...deps(), viewer: { userId: await account() }, targetType: "PRODUCT", targetId: listing.id, reason: "SPAM", detail: null }))
+      .rejects.toMatchObject({ code: "TARGET_NOT_FOUND" });
+    expect(await db!.select().from(reports).where(eq(reports.productId, listing.id))).toHaveLength(0);
+  });
+
+  it("refuses reports against a comment on an unpublished listing", async () => {
+    // The comment half of the rule above. A listing that was never published
+    // has no public discussion, so a comment on it is not public either and
+    // answering for one would confirm the listing exists.
+    const listing = await product();
+    const posted = await comment(listing.id);
+    const input = { ...deps(), viewer: { userId: await account() }, targetType: "COMMENT", targetId: posted.id, reason: "SPAM", detail: null };
+    await db!.update(products).set({ publicationState: "DRAFT" }).where(eq(products.id, listing.id));
+    await expect(fileReport(input)).rejects.toMatchObject({ code: "TARGET_NOT_FOUND" });
+  });
+
+  it("still accepts a report against content a moderator has already hidden", async () => {
+    // Deliberately the opposite of the two cases above, and the distinction is
+    // publication, not moderation. Hidden content was public, so it is exactly
+    // what an appeal or a privacy request under `docs/MODERATION.md` §10 is
+    // filed against — and those arrive after the takedown, never before.
+    const listing = await product();
+    const posted = await comment(listing.id);
+    const input = { ...deps(), viewer: { userId: await account() }, targetType: "COMMENT", targetId: posted.id, reason: "PRIVACY", detail: null };
+
+    await db!.update(comments).set({ moderationState: "HIDDEN" }).where(eq(comments.id, posted.id));
+    await expect(fileReport(input)).resolves.toMatchObject({ created: true });
+
+    await db!.update(products).set({ moderationState: "REMOVED" }).where(eq(products.id, listing.id));
+    await expect(
+      fileReport({ ...deps(), viewer: { userId: await account() }, targetType: "PRODUCT", targetId: listing.id, reason: "PRIVACY", detail: null })
+    ).resolves.toMatchObject({ created: true });
+  });
+
 });

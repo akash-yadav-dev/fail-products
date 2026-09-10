@@ -175,7 +175,12 @@ Do not use “dead” as the canonical database status. It can be a presentation
 - Status filters.
 - Product detail pages.
 - Pagination or cursor-based loading.
-- Basic sorting: newest, recently updated, most discussed, most referred.
+- Basic sorting: newest, recently updated. **Most discussed** and **most referred** are
+  not implemented and are not in the MVP: a keyset sort needs a stored ordered column,
+  and neither a comment count nor a referral count is one without denormalising it onto
+  `products` and keeping it correct through inserts, moderation changes, and cascade
+  deletes. That is earned by a measurement (`CLAUDE.md` §7), not assumed — the first
+  listing whose discussion is worth finding from a list is the measurement.
 
 #### Product page
 
@@ -214,9 +219,22 @@ Minimum fields:
 - product;
 - consent/terms acknowledgement.
 
+Signup is **double opt-in** (ADR-029). A new entry is pending; FailProducts sends one
+confirmation email, and the address joins the list only when that link is followed. A pending
+address receives nothing else and never appears in an export. Every waitlist email carries a
+removal link, and removal erases the entry rather than flagging it (`LEGAL.md` §5).
+
+The consent record — the timestamp and the exact wording agreed to — is stored with the entry
+and is required. It is the lawful basis for every later email, not metadata about the row.
+
+The waitlist is off by default and the owner switches it on per product. Switching it off stops
+new signups and deletes nothing: addresses already given were given under a consent nobody
+withdrew.
+
 Waitlist emails must be sent through ZeptoMail.
 
-The creator should be able to export waitlist data as CSV.
+The creator should be able to export waitlist data as CSV. The export is owner-only — a
+moderator cannot take it — and every download is recorded (`SECURITY.md` §11).
 
 #### Referral tracking
 
@@ -225,6 +243,26 @@ Every product website link from FailProducts should include a platform-owned att
 `?utm_source=failproducts&utm_medium=referral&utm_campaign=product-page`
 
 The system should record a lightweight referral event without collecting invasive visitor profiling.
+
+Every outbound link goes through `/go/<slug>`, which records the click and then redirects to the
+product's own website with the parameters above attached. The destination is read from the
+listing, never from the request, so the hop cannot be pointed anywhere a founder did not publish
+— and a hidden, draft, or removed listing does not resolve, so it cannot be used to reach
+content the directory is refusing to show. The link's visible text stays the destination host, so
+a reader still sees where they are going before they click.
+
+Counting on the product page itself is not an option: that page is prerendered and cached
+(ADR-027), so most visits never reach the server. A client-side beacon was the alternative and is
+worse — it counts only visitors who ran our JavaScript and did not leave before it fired, which
+produces a number that looks like traffic and is not.
+
+A referral event stores **the product and the instant, and nothing else**. No IP address, no user
+agent, no session or visitor identifier. That is what "without invasive visitor profiling" means
+here, and it has a consequence worth stating rather than discovering: these counts cannot be
+deduplicated per person, so they are clicks and must never be labelled visitors or traffic.
+
+Raw events are kept for 30 days and collapsed into a per-product, per-day rollup that is kept
+indefinitely (ADR-018). Everything a founder is shown reads the rollup.
 
 MVP metric:
 
@@ -482,7 +520,17 @@ rejected, and the reporter is told the same thing either way.
 
 ### WaitlistEntry
 
-Email captured for a product waitlist.
+Email captured for a product waitlist, with the consent that makes it lawful to write to:
+a timestamp and the exact wording agreed to, both required by the database rather than by
+convention. One entry per address per product, so joining twice is a no-op rather than a second
+row. Pending until the confirmation link is followed (ADR-029), and erased — never flagged — on
+request.
+
+### WaitlistExport
+
+A record that somebody downloaded a product's subscriber list: product, actor, row count, time.
+No subscriber data. `SECURITY.md` §11 requires it because the export is the one request that
+releases bulk personal data, and "who took the list" is the question asked afterwards.
 
 ### ReferralEvent
 

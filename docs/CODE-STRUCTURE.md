@@ -108,6 +108,7 @@ failproducts/
 │   │   ├── product-repository.ts
 │   │   ├── user-repository.ts
 │   │   ├── comment-repository.ts
+│   │   ├── waitlist-repository.ts
 │   │   └── ...
 │   │
 │   ├── db/
@@ -131,9 +132,10 @@ failproducts/
 │   ├── lib/
 │   │   ├── auth/
 │   │   ├── config/
+│   │   ├── csv/                 # escaping and formula neutralisation for exports
 │   │   ├── forms/               # the shape a Server Action returns to a form
 │   │   ├── ids/
-│   │   ├── validation/
+│   │   ├── validation/          # url, email — shared by domain/ and services/
 │   │   ├── urls/
 │   │   ├── security/
 │   │   └── utils/
@@ -253,6 +255,13 @@ Examples:
 ```
 
 Do not create `/api/doEverything` style endpoints.
+
+Two routes deliberately sit outside that shape:
+
+- **`/go/[slug]`** — the outbound referral hop. It is not a resource; it is a redirect a person
+  follows, and it is short because it appears in the status bar of every listing's Visit link.
+- **`/api/jobs/referral-maintenance`** — triggered by a scheduler rather than by a client, and
+  named for the job rather than for a resource, because it acts on every product at once.
 
 ## Component rules
 

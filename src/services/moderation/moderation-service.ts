@@ -11,6 +11,7 @@ import {
   type ReportStatus,
   type ReportTargetType,
 } from "@/domain/moderation/report";
+import type { FailureStatus } from "@/domain/product/failure-status";
 import {
   canTransitionModeration,
   type ModerationState,
@@ -195,14 +196,11 @@ export async function listModerationLog(input: {
 /**
  * Moderates a comment and closes the reports that asked for it.
  *
- * Three writes, in this order and never a different one: the state, the audit
- * row, then the reports. If the audit write fails the state change has already
- * happened and the row is discoverable from the comment itself; if the report
- * close fails the queue shows work that is already done. Both are recoverable.
- * The reverse order is not: a resolved report pointing at a comment that was
- * never touched is a moderation record that is simply false.
+ * State, history, and report resolution are one atomic statement. A stale
+ * transition or a failed audit insert leaves all three unchanged.
  */
 export async function moderateComment(input: {
+  rateLimiter: RateLimiter;
   reports: ReportRepository;
   comments: CommentRepository;
   users: { findRole(id: string): Promise<string | null> };
@@ -215,6 +213,8 @@ export async function moderateComment(input: {
   now?: Date;
 }) {
   const actorId = await requireModerator(input);
+  const limit = await input.rateLimiter.consume(RATE_LIMITS.moderationWrite, actorId);
+  if (!limit.allowed) throw new ModerationError("RATE_LIMITED", limit.resetAt);
   const reason = parseModerationReason(input.reason);
 
   const comment = await input.comments.findForModeration(input.commentId);
@@ -225,26 +225,15 @@ export async function moderateComment(input: {
     throw new ModerationError("ILLEGAL_TRANSITION");
   }
 
-  await input.comments.setModerationState(input.commentId, input.to);
-
-  await input.reports.recordCommentAction({
-    commentId: input.commentId,
-    fromValue: from,
-    toValue: input.to,
-    actorId,
-    reportId: input.reportId ?? null,
-    reason,
+  if (input.reportId) {
+    const report = await input.reports.findById(input.reportId);
+    if (!report || report.commentId !== input.commentId) throw new ModerationError("REPORT_NOT_FOUND");
+  }
+  const changed = await input.reports.applyCommentModeration({
+    commentId: input.commentId, from, to: input.to, actorId,
+    reportId: input.reportId ?? null, reason, now: input.now ?? new Date(),
   });
-
-  await input.reports.resolveOpenForTarget({
-    commentId: input.commentId,
-    // Acting on the content is what "actioned" means. Restoring it — moving
-    // back to VISIBLE — answers the reports the other way.
-    status: input.to === "VISIBLE" ? "DISMISSED" : "ACTIONED",
-    resolvedBy: actorId,
-    note: reason,
-    now: input.now ?? new Date(),
-  });
+  if (!changed) throw new ModerationError("ILLEGAL_TRANSITION");
 
   return {
     id: input.commentId,
@@ -267,6 +256,7 @@ export async function moderateComment(input: {
  * putting words in somebody's mouth.
  */
 export async function moderateProduct(input: {
+  rateLimiter: RateLimiter;
   reports: ReportRepository;
   products: ProductRepository;
   users: { findRole(id: string): Promise<string | null> };
@@ -278,6 +268,8 @@ export async function moderateProduct(input: {
   now?: Date;
 }) {
   const actorId = await requireModerator(input);
+  const limit = await input.rateLimiter.consume(RATE_LIMITS.moderationWrite, actorId);
+  if (!limit.allowed) throw new ModerationError("RATE_LIMITED", limit.resetAt);
   const reason = parseModerationReason(input.reason);
 
   const product = await input.products.findForAuthorization(input.productId);
@@ -288,30 +280,24 @@ export async function moderateProduct(input: {
     throw new ModerationError("ILLEGAL_TRANSITION");
   }
 
-  await input.products.setModerationState(input.productId, input.to);
-
-  await input.products.recordStatusChange({
-    productId: input.productId,
-    axis: "MODERATION",
-    fromValue: from,
-    toValue: input.to,
-    actorId,
-    actorRole: "MODERATOR",
-    reason,
+  if (input.reportId) {
+    const report = await input.reports.findById(input.reportId);
+    if (!report || report.productId !== input.productId) throw new ModerationError("REPORT_NOT_FOUND");
+  }
+  const changed = await input.reports.applyProductModeration({
+    productId: input.productId, from, to: input.to, actorId, reason, now: input.now ?? new Date(),
   });
-
-  await input.reports.resolveOpenForTarget({
-    productId: input.productId,
-    status: input.to === "NONE" ? "DISMISSED" : "ACTIONED",
-    resolvedBy: actorId,
-    note: reason,
-    now: input.now ?? new Date(),
-  });
+  if (!changed) throw new ModerationError("ILLEGAL_TRANSITION");
 
   return {
     id: input.productId,
     moderationState: input.to,
     slug: product.slug,
+    // Returned so the action can invalidate the lists this listing appears
+    // on, not just its own page. Both are prerendered under ADR-027, so a
+    // removed listing keeps its card on them until they are revalidated.
+    categorySlug: product.categorySlug,
+    failureStatus: product.failureStatus as FailureStatus,
   };
 }
 
@@ -324,6 +310,7 @@ export async function moderateProduct(input: {
  * ever read.
  */
 export async function resolveReport(input: {
+  rateLimiter: RateLimiter;
   reports: ReportRepository;
   users: { findRole(id: string): Promise<string | null> };
   viewer: ModerationViewer;
@@ -333,6 +320,8 @@ export async function resolveReport(input: {
   now?: Date;
 }) {
   const actorId = await requireModerator(input);
+  const limit = await input.rateLimiter.consume(RATE_LIMITS.moderationWrite, actorId);
+  if (!limit.allowed) throw new ModerationError("RATE_LIMITED", limit.resetAt);
 
   if (input.status !== "ACTIONED" && input.status !== "DISMISSED") {
     throw new ModerationError("ILLEGAL_TRANSITION");

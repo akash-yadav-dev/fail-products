@@ -4,7 +4,6 @@ import { CommentRepository } from "@/repositories/comment-repository";
 import { ProductRepository } from "@/repositories/product-repository";
 import { RateLimitRepository } from "@/repositories/rate-limit-repository";
 import { ReportRepository } from "@/repositories/report-repository";
-import { UserRepository } from "@/repositories/user-repository";
 import {
   fileReport as fileReportUseCase,
   listModerationLog as listModerationLogUseCase,
@@ -14,6 +13,7 @@ import {
   resolveReport as resolveReportUseCase,
 } from "@/services/moderation/moderation-service";
 import { DatabaseRateLimiter } from "@/services/security/rate-limit";
+import { findUserRole } from "@/services/user/server-profile";
 
 /**
  * The server-side binding for the moderation use cases.
@@ -30,7 +30,10 @@ function dependencies() {
     reports: new ReportRepository(db),
     comments: new CommentRepository(db),
     products: new ProductRepository(db),
-    users: new UserRepository(db),
+    // The request-scoped reader rather than a fresh repository: every
+    // moderation use case re-checks the role, and a dashboard render makes
+    // three such calls for a fact that cannot change between them.
+    users: { findRole: findUserRole },
     rateLimiter: new DatabaseRateLimiter(new RateLimitRepository(db)),
   };
 }
@@ -86,6 +89,7 @@ export function moderateComment(
     reports: deps.reports,
     comments: deps.comments,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }
 
@@ -98,6 +102,7 @@ export function moderateProduct(
     reports: deps.reports,
     products: deps.products,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }
 
@@ -109,5 +114,6 @@ export function resolveReport(
     ...input,
     reports: deps.reports,
     users: deps.users,
+    rateLimiter: deps.rateLimiter,
   });
 }

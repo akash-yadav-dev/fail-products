@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql, inArray } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import { authAccounts, authTokens, sessions, users } from "@/db/schema";
@@ -16,8 +16,14 @@ export class AuthRepository {
 
   async cleanupAuthData(now: number) {
     const date = new Date(now);
-    await this.db.delete(authTokens).where(sql`${authTokens.expiresAt} <= ${date} OR ${authTokens.consumedAt} IS NOT NULL`);
-    await this.db.delete(sessions).where(sql`${sessions.expiresAt} <= ${date} OR ${sessions.revokedAt} IS NOT NULL`);
+    await this.db.batch([
+      this.db.delete(authTokens).where(inArray(authTokens.id,
+        this.db.select({ id: authTokens.id }).from(authTokens)
+          .where(sql`${authTokens.expiresAt} <= ${date} OR ${authTokens.consumedAt} IS NOT NULL`).limit(100))),
+      this.db.delete(sessions).where(inArray(sessions.id,
+        this.db.select({ id: sessions.id }).from(sessions)
+          .where(sql`${sessions.expiresAt} <= ${date} OR ${sessions.revokedAt} IS NOT NULL`).limit(100))),
+    ]);
   }
 
   /**
@@ -52,11 +58,11 @@ export class AuthRepository {
       .limit(10);
   }
 
-  incrementTokenAttempt(id: string, now: number, maxAttempts: number) {
+  incrementTokenAttempt(email: string, now: number, maxAttempts: number) {
     return this.db
       .update(authTokens)
       .set({ attempts: sql`${authTokens.attempts} + 1` })
-      .where(and(eq(authTokens.id, id), isNull(authTokens.consumedAt), gt(authTokens.expiresAt, new Date(now)), sql`${authTokens.attempts} < ${maxAttempts}`));
+      .where(and(eq(authTokens.email, email), isNull(authTokens.consumedAt), gt(authTokens.expiresAt, new Date(now)), sql`${authTokens.attempts} < ${maxAttempts}`));
   }
 
   consumeToken(id: string, now: number, maxAttempts: number) {
@@ -72,7 +78,7 @@ export class AuthRepository {
   }
 
   createUser(input: { email: string | null; displayName?: string | null }) {
-    return this.db.insert(users).values(input).onConflictDoNothing({ target: users.email });
+    return this.db.insert(users).values(input).onConflictDoNothing({ target: users.email }).returning({ id: users.id });
   }
 
   createSession(input: { userId: string; tokenHash: string; expiresAt: Date; lastSeenAt: Date }) {

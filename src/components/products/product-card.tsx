@@ -19,10 +19,17 @@ import type { ProductListItem } from "@/repositories/product-repository";
  *           Category · Last updated
  *           Community comments · Referral signal
  *
- * The last row is absent, and deliberately so: comment counts are Phase 3 and
- * referral signals are Phase 4. Rendering "0 comments" on every card would
- * describe the schema rather than the product, and a directory that looks
- * uniformly dead is the one thing this design cannot afford.
+ * The last row is still absent. Referral signals are Phase 4. Comment counts
+ * shipped their table in Phase 3 and are **not** on the card, which is a
+ * decision rather than an omission: a count per card is an aggregate over
+ * `comments` on the hottest query in the application, and the alternative — a
+ * denormalised `comment_count` on `products`, kept correct through inserts,
+ * moderation changes and cascade deletes — is the Stage 2 work `CLAUDE.md` §7
+ * says must be earned by a measurement. The measurement that earns it is the
+ * first listing whose discussion is worth finding from a list; there are none
+ * today. Rendering "0 comments" on every card until then would describe the
+ * schema rather than the product, and a directory that looks uniformly dead is
+ * the one thing this design cannot afford.
  *
  * A logo needs R2, which is Phase 1 slice 1.5 and still blocked on transport,
  * so the identity block falls back to the product's initial rather than

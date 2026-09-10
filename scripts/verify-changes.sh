@@ -393,23 +393,35 @@ fi
 
 # --- Commit hygiene --------------------------------------------------------
 #
-# Merge commits are judged separately, and deliberately.
+# Platform-created commits are judged separately, and deliberately.
 #
-# A merge commit created by GitHub's merge button has an author the platform
-# chooses (the merging account's primary address) and no DCO trailer, and the
-# contributor who opened the pull request can change neither. Blocking on one is
-# therefore a finding nobody can act on: the commit is already in shared
-# history, and the only way to alter it is a force-push to a protected branch.
+# A merge commit created by any merge button -- GitHub's, or a plain
+# `git merge --no-ff` a contributor ran locally before a PR without rewriting
+# it -- has an author neither the contributor nor the platform will revisit,
+# and the contributor who opened the pull request can't fix it retroactively
+# either way. Blocking on one is therefore a finding nobody can act on: the
+# commit is already in shared history, and the only way to alter it is a
+# force-push to a protected branch. Parent count (2+) is a reliable signal
+# for this regardless of who or what produced the commit.
+#
+# A squash merge is the same problem with a different signal: it has exactly
+# one parent, same as a commit a contributor wrote by hand, so parent count
+# alone can't distinguish "GitHub squashed this PR" from "a person wrote this
+# commit and forgot to sign off." What's reliable there is committer identity
+# -- GitHub's web merge UI always commits as `GitHub <noreply@github.com>`,
+# whichever merge method produced the commit -- so that signal is checked too,
+# in addition to parent count, not instead of it.
 #
 # That matters most on a promotion pull request. `dev -> main` legitimately
-# contains every merge commit `dev` has ever accumulated, so a hard failure
-# there makes the release gate permanently red for something no release can fix.
+# contains every platform-created commit `dev` has ever accumulated, so a hard
+# failure there makes the release gate permanently red for something no
+# release can fix.
 #
 # The guarantee that matters is kept intact: a commit somebody wrote still has
 # to be signed off and correctly authored, and every such commit is still a
-# BLOCK. What a platform merge produces is reported as a warning -- loudly
-# enough that the address leak stays visible and the repository settings get
-# fixed, rather than silently accepted.
+# BLOCK. What a merge commit or the platform produces is reported as a
+# warning -- loudly enough that an address leak stays visible and the
+# repository settings get fixed, rather than silently accepted.
 if [ -n "$COMMITS" ]; then
   ATTRIB=0; NOSIGN=""; BADAUTH=""; MERGE_NOSIGN=""; MERGE_BADAUTH=""
   while IFS= read -r c; do
@@ -421,17 +433,36 @@ if [ -n "$COMMITS" ]; then
     IS_MERGE=0
     case "$(git log -1 --format='%P' "$c")" in *' '*) IS_MERGE=1 ;; esac
 
+    # GitHub's web merge UI (merge, squash, or rebase button) always commits
+    # as this identity, no matter which merge method produced the commit.
+    ce="$(git log -1 --format='%ce' "$c")"
+    IS_PLATFORM=0
+    [ "$ce" = "noreply@github.com" ] && IS_PLATFORM=1
+
+    IS_EXEMPT=0
+    { [ "$IS_MERGE" -eq 1 ] || [ "$IS_PLATFORM" -eq 1 ]; } && IS_EXEMPT=1
+
     ae="$(git log -1 --format='%ae' "$c")"
     ref="$(git log -1 --format='%h' "$c")"
 
     if printf '%s' "$body" | grep -qi '^Signed-off-by:'; then :; else
-      if [ "$IS_MERGE" -eq 1 ]; then MERGE_NOSIGN="$MERGE_NOSIGN $ref"
+      if [ "$IS_EXEMPT" -eq 1 ]; then MERGE_NOSIGN="$MERGE_NOSIGN $ref"
       else NOSIGN="$NOSIGN $ref"; fi
     fi
 
     if [ "$ae" != "$ALLOWED_EMAIL" ]; then
-      if [ "$IS_MERGE" -eq 1 ]; then MERGE_BADAUTH="$MERGE_BADAUTH $ref <$ae>"
-      else BADAUTH="$BADAUTH $ref <$ae>"; fi
+      # The short hash only, never the address.
+      #
+      # This output is printed into a public Actions log on every run, so an
+      # address echoed here is an address published -- by the very check whose
+      # job is to keep it out of the repository. CLAUDE.md 4 makes the same
+      # point about the rule itself: naming the addresses to block would
+      # publish them, which is exactly what the rule exists to prevent.
+      #
+      # The hash is enough to act on. Locally:
+      #   git log -1 --format='%ae' <hash>
+      if [ "$IS_EXEMPT" -eq 1 ]; then MERGE_BADAUTH="$MERGE_BADAUTH $ref"
+      else BADAUTH="$BADAUTH $ref"; fi
     fi
   done <<< "$COMMITS"
 
@@ -439,13 +470,13 @@ if [ -n "$COMMITS" ]; then
                       || note "  commit attribution     ok"
   [ -n "$NOSIGN" ] && fail "commit(s) missing DCO sign-off:$NOSIGN — use 'git commit -s'" \
                    || note "  DCO sign-off           ok"
-  [ -n "$BADAUTH" ] && fail "commit(s) with a non-allowlisted author:$BADAUTH" \
+  [ -n "$BADAUTH" ] && fail "commit(s) with a non-allowlisted author:$BADAUTH (see it with: git log -1 --format='%ae' <hash>)" \
                     || note "  commit author          ok"
 
   # Reported, never silent -- and never blocking, because nothing in a pull
   # request can change a commit that is already merged.
-  [ -n "$MERGE_NOSIGN" ] && warn "merge commit(s) with no DCO sign-off, created by the merge button:$MERGE_NOSIGN"
-  [ -n "$MERGE_BADAUTH" ] && warn "merge commit(s) authored by the platform rather than the allowlisted address:$MERGE_BADAUTH -- set allow_merge_commit=false so no more are created, and turn on the account's email privacy. Existing ones cannot be changed without rewriting published history."
+  [ -n "$MERGE_NOSIGN" ] && warn "platform commit(s) with no DCO sign-off, created by the merge button:$MERGE_NOSIGN"
+  [ -n "$MERGE_BADAUTH" ] && warn "platform commit(s) authored by the platform rather than the allowlisted address:$MERGE_BADAUTH -- allow_merge_commit is off so no more are created. Existing ones cannot be changed without rewriting published history."
 fi
 
 # --- Hooks installed -------------------------------------------------------

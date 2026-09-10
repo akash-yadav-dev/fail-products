@@ -118,6 +118,68 @@ function asCountedRule(rule: RateLimitRule): CountedRule {
  */
 export const RATE_LIMITS = {
   /**
+   * Product submission, per account.
+   *
+   * The most expensive write an ordinary account can make: a listing carries a
+   * description `docs/PRODUCT.md` caps at 20,000 characters, plus two opening
+   * rows of status history, and it is metered storage that nothing reclaims.
+   * Authenticated abuse here grows the table and every query over it.
+   *
+   * Five an hour, because the honest ceiling is far lower. This site exists
+   * for founders filing their own products (CLAUDE.md §9, listings are
+   * owner-only), and a founder with six failed products to file in one hour is
+   * rare enough to be worth the wait; a script filing hundreds is the case
+   * this exists for.
+   */
+  productSubmit: {
+    name: "product-submit",
+    scope: "USER",
+    limit: 5,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Profile edits, per account.
+   *
+   * Cheap individually — one row, no new storage — so this is not a cost
+   * limit. It guards username churn: the handle appears on every comment and
+   * every listing card, and an account cycling through handles in a loop makes
+   * the public record of who said what unreadable, and any cached page that
+   * renders a username permanently wrong.
+   *
+   * Twenty in ten minutes leaves ordinary editing — fixing a typo, trying a
+   * few handles before settling — entirely unaffected.
+   */
+  profileUpdate: {
+    name: "profile-update",
+    scope: "USER",
+    limit: 20,
+    windowSeconds: 10 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Moderation writes, per moderator.
+   *
+   * Not an abuse limit in the usual sense — a moderator is trusted, and this
+   * is not what stops one going rogue; the audit trail is. It is a blast
+   * radius limit on a stolen or scripted moderator session, which can
+   * otherwise hide the entire directory as fast as the database answers.
+   *
+   * Sixty in ten minutes is well above a person working a queue steadily and
+   * well below a script clearing it. It sits deliberately after the role check
+   * and before the read, so a rejected actor never reaches the content.
+   */
+  moderationWrite: {
+    name: "moderation-write",
+    scope: "USER",
+    limit: 60,
+    windowSeconds: 10 * 60,
+    layer: "counted",
+  },
+
+  /**
    * Comment posting, per account.
    *
    * `SECURITY.md` §11 names the Workers `ratelimit` binding for this endpoint.
@@ -151,6 +213,66 @@ export const RATE_LIMITS = {
     name: "report-submit",
     scope: "USER",
     limit: 20,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Waitlist signup, per address.
+   *
+   * `SECURITY.md` §11 names the `ratelimit` binding for this endpoint, for the
+   * same reason and with the same answer as `commentPost` above: nothing is
+   * deployed to Workers, so there is no binding to call, and counted is the
+   * stricter of the two.
+   *
+   * Per **address**, not per account — this endpoint is open to signed-out
+   * visitors, so there is no account to count against. Three an hour is
+   * somebody who did not receive the confirmation email and tried again,
+   * twice. Anything past that is a script using the form to send mail to an
+   * address its owner did not enter, which is the abuse that matters here:
+   * the request costs the attacker nothing and costs the recipient an email
+   * they did not ask for.
+   */
+  waitlistJoinEmail: {
+    name: "waitlist-join-email",
+    scope: "EMAIL",
+    limit: 3,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Waitlist signup, per address of the sender.
+   *
+   * The per-email limit alone stops one mailbox being flooded; it does nothing
+   * about one machine walking a list of a thousand addresses, which is the
+   * shape of the attack that gets a sending domain blocklisted. `SECURITY.md`
+   * §11 already pairs the two for sign-in, and this is the same threat.
+   */
+  waitlistJoinIp: {
+    name: "waitlist-join-ip",
+    scope: "IP",
+    limit: 20,
+    windowSeconds: 60 * 60,
+    layer: "counted",
+  },
+
+  /**
+   * Waitlist CSV export, per account.
+   *
+   * The one rule in this table that `SECURITY.md` §11 already assigns to the
+   * counted layer rather than the binding, and it says why: this endpoint hands
+   * over bulk personal data in a single request. An accurate global count is
+   * the point — a per-colocation limit on an endpoint that returns everybody's
+   * email addresses is not a limit.
+   *
+   * Ten an hour is far more than a founder checking their list and far less
+   * than a scripted pull of every product they can reach.
+   */
+  waitlistExport: {
+    name: "waitlist-export",
+    scope: "USER",
+    limit: 10,
     windowSeconds: 60 * 60,
     layer: "counted",
   },

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { isCommentModerationState } from "@/domain/comment/moderation";
+import { findFailureStatus } from "@/domain/product/failure-status";
 import { MODERATION_STATES } from "@/domain/product/transitions";
 import type { FormActionState } from "@/lib/forms/action-state";
 import { currentUser } from "@/services/auth/current-user";
@@ -76,7 +77,26 @@ export async function moderateProductAction(
     });
 
     revalidatePath("/products/" + result.slug);
+    // Related cards, share images, and sitemap entries also disclose the listing.
+    // The installed build's .meta files include the route group in layout tags.
+    revalidatePath("/(site)/products", "layout");
+    revalidatePath("/sitemap.xml");
     revalidatePath("/dashboard/moderation");
+
+    // The listing's own page is not the only place its card is rendered.
+    // `/categories/[slug]` and `/status/[slug]` are prerendered at five
+    // minutes (ADR-027), so without these a removed listing keeps a card on
+    // them for the window an active incident happens inside — the same
+    // argument hideCommentAction uses for the detail page.
+    //
+    // Two targeted paths, never all thirteen category pages: blanket
+    // invalidation would trade this defect for the cache ratio
+    // `docs/DEPLOYMENT.md` §11 makes launch-blocking.
+    if (result.categorySlug) {
+      revalidatePath("/categories/" + result.categorySlug);
+      revalidatePath("/categories");
+    }
+    revalidatePath("/status/" + findFailureStatus(result.failureStatus).slug);
 
     return { ok: true, message: `Listing ${result.moderationState.toLowerCase()}.` };
   } catch (error) {
@@ -118,6 +138,8 @@ function failure(error: unknown): FormActionState {
   }
 
   switch (error.code) {
+    case "RATE_LIMITED":
+      return { ok: false, message: "Too many moderation actions. Try again in ten minutes." };
     case "NOT_SIGNED_IN":
     case "FORBIDDEN":
       // The same answer for both, and deliberately uninformative: a moderation
