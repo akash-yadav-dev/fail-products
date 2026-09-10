@@ -49,7 +49,11 @@ export async function verifyEmailCode(input: { repository: AuthRepository; email
   const [consumed] = await input.repository.consumeToken(matchedId, now, MAX_TOKEN_ATTEMPTS);
   if (!consumed) return { ok: false, reason: "invalid-code" };
   let [user] = await input.repository.findUserByEmail(email);
-  if (!user) { await input.repository.createUser({ email }); [user] = await input.repository.findUserByEmail(email); }
+  if (!user) {
+    [user] = await input.repository.createUser({ email });
+    // A concurrent first sign-in may win the unique-email insert.
+    if (!user) [user] = await input.repository.findUserByEmail(email);
+  }
   if (!user) return { ok: false, reason: "invalid-code" };
   return { ok: true, sessionToken: await createSession(input.repository, user.id, now), userId: user.id };
 }
