@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getDb } from "@/db";
 import { AuthRepository } from "@/repositories/auth-repository";
 import {
@@ -22,10 +23,11 @@ export function verifyEmailCode(input: Omit<Parameters<typeof verifyEmailCodeUse
   return verifyEmailCodeUseCase({ ...input, repository: repository() });
 }
 
-export function getSessionUser(sessionToken: string, now?: number) {
+// Deduplicate layout/page reads only. A new request rechecks expiry/revocation.
+export const getSessionUser = cache((sessionToken: string, now?: number) => {
   if (!sessionToken) return null;
   return getSessionUserUseCase(repository(), sessionToken, now);
-}
+});
 
 export function revokeSession(sessionToken: string, now?: number) {
   return revokeSessionUseCase(repository(), sessionToken, now);

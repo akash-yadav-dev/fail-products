@@ -20,9 +20,9 @@ function repository() {
   return new UserRepository(getDb());
 }
 
-export function getPublicProfile(username: string) {
+export const getPublicProfile = cache((username: string) => {
   return getPublicProfileUseCase(repository(), username);
-}
+});
 
 export function getOwnProfile(userId: string) {
   return repository().findById(userId);
