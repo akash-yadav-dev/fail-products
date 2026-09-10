@@ -1,7 +1,9 @@
 // src/services/product/server-product.ts
 import { revalidatePath } from "next/cache";
+import { cache } from "react";
 
 import { getDb } from "@/db";
+import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
 import { RateLimitRepository } from "@/repositories/rate-limit-repository";
@@ -30,6 +32,22 @@ function repository() {
 }
 
 type Without<T> = Omit<T, "repository">;
+
+type ProductSnapshot = Awaited<ReturnType<ProductRepository["findForAuthorization"]>>;
+
+/** Invalidate all public projections of both versions, after a successful mutation. */
+function invalidateProductChange(before: ProductSnapshot, after: ProductSnapshot) {
+  // A product can also appear on another product's related cards and OG image.
+  revalidatePath("/(site)/products", "layout");
+  const paths = new Set(["/products", "/categories", "/sitemap.xml"]);
+  for (const product of [before, after]) {
+    if (!product) continue;
+    paths.add(`/products/${product.slug}`);
+    if (product.categorySlug) paths.add(`/categories/${product.categorySlug}`);
+    paths.add(`/status/${findFailureStatus(product.failureStatus as FailureStatus).slug}`);
+  }
+  for (const path of paths) revalidatePath(path);
+}
 
 export async function createProduct(
   input: Without<Parameters<typeof createProductUseCase>[0]>
@@ -63,35 +81,42 @@ export async function updateProduct(
     repository: repository(),
   });
 
-  revalidatePath(`/products/${result.slug}`);
-  if (before && before.slug !== result.slug) {
-    revalidatePath(`/products/${before.slug}`);
-  }
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
 
   return result;
 }
 
-export function changePublicationState(
+export async function changePublicationState(
   input: Without<Parameters<typeof changePublicationStateUseCase>[0]>
 ) {
-  return changePublicationStateUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changePublicationStateUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function changeModerationState(
+export async function changeModerationState(
   input: Without<Parameters<typeof changeModerationStateUseCase>[0]>
 ) {
-  return changeModerationStateUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changeModerationStateUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function changeFailureStatus(
+export async function changeFailureStatus(
   input: Without<Parameters<typeof changeFailureStatusUseCase>[0]>
 ) {
-  return changeFailureStatusUseCase({ ...input, repository: repository() });
+  const before = await repository().findForAuthorization(input.productId);
+  const result = await changeFailureStatusUseCase({ ...input, repository: repository() });
+  invalidateProductChange(before, await repository().findForAuthorization(input.productId));
+  return result;
 }
 
-export function resolvePublicProduct(slug: string) {
+// Metadata and body share this read within a render, never across requests.
+export const resolvePublicProduct = cache((slug: string) => {
   return resolvePublicProductUseCase(repository(), slug);
-}
+});
 
 export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);

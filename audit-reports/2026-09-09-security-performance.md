@@ -204,6 +204,22 @@ derives implicit cache tags (`normalizeAppPath`: "Groups are ignored"), so neith
 match and both calls were silent no-ops. The first also *replaced* a working `/u/[username]` call,
 so editing a profile stopped refreshing the public profile page. Both now use the URL path.
 
+**Correction, 2026-09-10.** The paragraph above is wrong about this build, and it is left
+standing only so the mistake is not repeated. Next 16.3.3 does *not* strip the route group:
+`implicit-tags.js` derives the tag from the unnormalized page path, and every generated
+`.meta` file under `.next/server/app/products/` — the share-image routes included — carries
+`_N_T_/(site)/products/layout`. A `revalidatePath("/products", "layout")` call therefore
+matches nothing, which is the opposite of what R02 concluded. Product subtree invalidation
+now uses `/(site)/products`, checked against the built tags rather than against
+`normalizeAppPath`, and covered by a warm-cache moderation regression in
+`tests/e2e/performance-regressions.spec.ts`. The literal `/products/<slug>`,
+`/categories/<slug>` and `/status/<slug>` calls address real URLs rather than tags and were
+always valid; they are unchanged. R02's other call, `revalidatePath("/u/[username]", "page")`
+in the settings action, is left alone deliberately: `/u/[username]` appears in neither the
+prerender manifest nor the built `.meta` set, so it is rendered on every request and no form
+of that call invalidates anything. It is a no-op under either reading, not a fix to reverse
+without first giving the profile page a cache to invalidate.
+
 **R03 — Unreachable branch left in `verifyTurnstileToken`.** The `!response.ok` check was moved
 inside the `try` but not removed from after it.
 
