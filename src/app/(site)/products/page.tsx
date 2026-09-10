@@ -99,7 +99,7 @@ export default async function ProductsPage({
 
       <Container className="flex flex-col gap-8 py-10 sm:py-14">
         <div className="flex flex-col gap-4">
-          <ProductSearch initialQuery={query} />
+          <ProductSearch initialQuery={query} category={category?.slug} status={status?.slug} />
 
           {filters.length > 0 ? (
             <div
