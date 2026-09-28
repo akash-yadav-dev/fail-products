@@ -23,11 +23,11 @@ feature/* | fix/* | docs/* | security/*
 `dev` is an integration branch, not a working branch. It is written to by merge only, exactly
 like `main`, which is why `scripts/verify-changes.sh` blocks a direct commit on either.
 
-**No deployment is attached to either branch yet.** No hosting platform has been chosen and no
-Cloudflare project exists, so there is deliberately no deploy workflow — one written against an
-undecided target could not be verified, and `CLAUDE.md` §7 keeps infrastructure earned rather
-than anticipated. When a target is decided, `dev` is where the preview environment attaches and
-`main` is where production does; the branch model already accommodates that without changing.
+The CI workflow builds a Worker and maps `dev` to the isolated staging preview and `main` to
+production. Production still requires `PRODUCTION_READY=true` in its GitHub environment.
+Cloudflare deployment credentials are configured per environment; until they exist, the job
+reports a skipped deploy. Neither branch has a live deployment merely because this workflow
+exists. The app targets separate `workers.dev` Workers and no custom domain yet.
 
 ## Branch protection — `main` and `dev`
 
@@ -305,5 +305,4 @@ the leak surface — it is not the fix, and it does not undo the five commits al
 One caveat, learned by running it: the rulesets **list** endpoint returns every ruleset with
 `conditions: null`, so the target branch can only be read from each ruleset's own detail
 endpoint. Matching on the list silently finds nothing and reports the ruleset as missing.
-
 

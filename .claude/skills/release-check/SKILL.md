@@ -24,11 +24,15 @@ pnpm lint
 pnpm test               # unit
 pnpm test:integration   # against a Neon development branch
 pnpm build              # Next.js production build
-pnpm vinext:check       # Cloudflare/vinext compatibility check
 ```
 
 `docs/DEPLOYMENT.md` §8. A warning that has been ignored for three releases is a finding —
 either fix it or record why it is acceptable.
+
+**Workers compatibility is currently BLOCKED:** `package.json` has no
+`vinext:check` script or Workers adapter configuration. Add and run the real
+compatibility check against a preview deployment before considering this gate
+complete. Do not report the Next.js build as a Workers check.
 
 ## 2. Migrations
 

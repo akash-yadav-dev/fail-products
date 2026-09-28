@@ -23,15 +23,17 @@ A product may be listed while it is still live. A product can also leave the dir
 - [Verification Reference](./AI-VERIFICATION.md) — the three verification levels, impact radius, severity and confidence, decision rules, report format.
 - [Verification Flow](./AI-VERIFICATION-FLOW.md) — the pipeline lifecycle, with worked examples at four risk levels.
 - [Roadmap](./ROADMAP.md) — MVP milestones and post-MVP evolution.
+- [Public Content](./PUBLIC-CONTENT.md) — route inventory, copy status, and the boundary between demo and real listings.
 - [Architecture Decisions](./DECISIONS.md) — important decisions and why they were made.
 
 ## Status
 
-This documentation describes the planned MVP and the architectural guardrails to use before implementation begins.
+These documents define the intended MVP and its engineering rules. Implementation is
+underway. Use [the roadmap](./ROADMAP.md) for current work; use the code and tests
+to describe what runs today. A passing local build is not deployment evidence.
 
-An architecture review on 2026-08-31 added ADR-012 through ADR-022. Four of those change
-requirements stated elsewhere in these documents, and are the current position wherever an
-older passage disagrees:
+The accepted decisions in [DECISIONS.md](./DECISIONS.md) govern where an older
+planning note differs. In particular:
 
 - **Listings are owner-only** (ADR-012) — only a product's founder may publish it. Third-party
   listings are Post-MVP and require the system described in [Legal](./LEGAL.md) §2.

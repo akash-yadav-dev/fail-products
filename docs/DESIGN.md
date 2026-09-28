@@ -33,7 +33,8 @@ Use **shadcn/ui** as the component foundation.
 
 Components should be added with the shadcn CLI and customized through composition and tokens before creating custom primitives.
 
-Core components likely needed in MVP:
+Add generated components when a page uses them; do not retain unused primitives
+only because a component library offers them. Components currently used include:
 
 - Button
 - Card
@@ -42,16 +43,13 @@ Core components likely needed in MVP:
 - Input
 - Textarea
 - Select
-- Checkbox
 - Dialog
 - Dropdown Menu
-- Tabs
 - Tooltip
 - Separator
 - Skeleton
 - Alert
 - Breadcrumb
-- Pagination
 - Toast/Sonner-style notifications
 
 The current shadcn Next.js flow supports the App Router and component generation via the CLI.

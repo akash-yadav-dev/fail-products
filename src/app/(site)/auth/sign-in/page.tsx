@@ -7,7 +7,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { SiteLogo } from "@/components/layout/site-logo";
 import { SignInForm } from "@/components/auth/sign-in-form";
@@ -45,7 +44,7 @@ export default async function SignInPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Sign in</CardTitle>
+          <h1 className="font-heading text-base font-medium leading-snug">Sign in</h1>
           <CardDescription>
             FailProducts is passwordless. You get a one-time code by email, or
             you sign in with GitHub.

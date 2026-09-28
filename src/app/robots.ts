@@ -19,6 +19,10 @@ import { siteConfig } from "@/lib/config/site";
  * a crawler needs to reach every listing.
  */
 export default function robots(): MetadataRoute.Robots {
+  if (process.env.PREVIEW_ONLY === "1") {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
+
   return {
     rules: [
       {

@@ -174,8 +174,8 @@ jobs:
           exit $status
 
   # ---------------------------------------------------------------------------
-  # Detect whether an application exists yet. The repository is currently
-  # documentation-only, so the app checks must not fail the build by being absent.
+  # Retain the missing-app guard for partial checkouts. This repository now
+  # contains an application, so the app and E2E jobs are expected to run.
   # ---------------------------------------------------------------------------
   detect:
     name: Detect application
@@ -194,16 +194,15 @@ jobs:
             echo "has_app=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_app=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No package.json — application checks skipped. Repository is pre-implementation."
+            echo "::notice::No package.json — application checks skipped in this checkout."
           fi
           if ls playwright.config.* >/dev/null 2>&1; then
             echo "has_e2e=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_e2e=false" >> "$GITHUB_OUTPUT"
           fi
-          # No test runner is installed yet. Skip the step rather than fail on a
-          # missing script, and rather than fake a passing `test` that asserts
-          # nothing — the notice keeps the gap visible on every run.
+          # If a partial checkout has no test script, report the skip rather
+          # than fabricate a passing test run.
           if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
@@ -419,3 +418,65 @@ jobs:
           fail-on-severity: moderate
           # AGPL-3.0-only distribution. docs/CONTRIBUTING.md section 2.
           deny-licenses: GPL-2.0, LGPL-2.0, BSD-4-Clause
+
+  worker_build:
+    name: Build Cloudflare Worker
+    runs-on: ubuntu-latest
+    needs: app
+    if: needs.app.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Build isolated preview
+        env:
+          PREVIEW_ONLY: "1"
+          DATABASE_URL: ""
+        run: pnpm build:worker
+
+  deploy:
+    name: Deploy Cloudflare Worker
+    runs-on: ubuntu-latest
+    needs: [hygiene, app, e2e, worker_build]
+    if: >-
+      github.event_name == 'push' &&
+      needs.hygiene.result == 'success' &&
+      needs.app.result == 'success' &&
+      needs.e2e.result == 'success' &&
+      needs.worker_build.result == 'success' &&
+      (github.ref_name == 'dev' || github.ref_name == 'main')
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Setup
+        uses: ./.github/actions/setup
+      - name: Check deploy configuration
+        id: config
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_READY: ${{ vars.PRODUCTION_READY }}
+        run: |
+          if [ "${{ github.ref_name }}" = main ] && [ "$PRODUCTION_READY" != true ]; then
+            echo "::notice::Production deploy skipped: PRODUCTION_READY is not true."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "::notice::Cloudflare deploy skipped: configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the GitHub environment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build for target environment
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          PREVIEW_ONLY: ${{ github.ref_name == 'dev' && '1' || '0' }}
+          DATABASE_URL: ""
+        run: pnpm build:worker
+      - name: Deploy to workers.dev
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env "${{ github.ref_name == 'main' && 'production' || 'staging' }}"

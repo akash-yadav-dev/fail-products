@@ -153,12 +153,11 @@ export default function HomePage() {
           </div>
 
           <Alert className="mt-8">
-            <AlertTitle>This is the skeleton, not the product</AlertTitle>
+            <AlertTitle>Built something that did not take off?</AlertTitle>
             <AlertDescription>
-              Layout, navigation, theming, and routes are in place, and so are
-              listings, accounts, comments, and waitlists. Referral tracking and
-              the creator dashboard are not, so parts of this site still render
-              an empty state rather than real numbers.
+              Share what you tried and what you learned. Founders own their
+              listings, and readers can ask questions and offer useful feedback.
+              Read the content guidelines before publishing your story.
             </AlertDescription>
           </Alert>
         </Container>

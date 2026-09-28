@@ -97,16 +97,15 @@ export default function GuidelinesPage() {
         <Alert>
           <AlertTitle>Appeals are not built yet</AlertTitle>
           <AlertDescription>
-            Reporting works today. The appeals process does not have a form
-            yet — if something here affects you or your product, use the
-            takedown contact below and a person will read it. That is the whole
-            route for now, and this page will say so until there is a better
-            one.
+            The in-product report control exists, but the correction, delist,
+            and appeal contact path is not ready. The takedown page explains
+            this gap. Public launch is blocked until people can submit a
+            request without an account.
           </AlertDescription>
         </Alert>
 
         <Button asChild variant="outline" size="lg" className="h-11 self-start">
-          <Link href="/takedown">Report or delist a product</Link>
+          <Link href="/takedown">Takedown process status</Link>
         </Button>
       </Container>
     </>

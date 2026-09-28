@@ -10,19 +10,22 @@ It is designed as a community resource, not a harassment platform.
 
 Start with [`docs/README.md`](./docs/README.md).
 
-## Planned stack
+## Stack and deployment target
 
 - Next.js + TypeScript
-- Cloudflare Workers
 - Neon PostgreSQL
 - Drizzle ORM
-- Cloudflare R2
-- ZeptoMail
-- Cloudflare Turnstile
 - shadcn/ui
 - Tailwind CSS
 - Inter
-- Recharts where charts are justified
+
+Cloudflare Workers is the deployment target. CI builds the Worker and maps
+`dev` to staging and `main` to production, but the Cloudflare credentials and
+live deployment checks remain pending. ZeptoMail and Turnstile adapters exist,
+but their production behavior has not been verified. R2 media transport is
+also pending. See the
+[roadmap](./docs/ROADMAP.md) for the current work and the
+[deployment guide](./docs/DEPLOYMENT.md) for the release gate.
 
 ## Development philosophy
 
@@ -49,7 +52,7 @@ email addresses, unsigned commits, and pushes to `main`. It runs automatically o
 and again in CI, so a local bypass does not get past the PR. On Windows,
 `pwsh scripts/verify-changes.ps1`.
 
-Development standards are enforced by eight committed agents and eleven procedural skills in
+Development standards are enforced by committed agents and procedural skills in
 [`.claude/`](./.claude/). They are public on purpose: you can read exactly what your PR will be
 reviewed against, and run the same reviews locally.
 

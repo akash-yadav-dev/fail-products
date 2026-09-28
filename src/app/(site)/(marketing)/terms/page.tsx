@@ -27,13 +27,16 @@ export default function TermsPage() {
         <Alert>
           <AlertTitle>Not published yet</AlertTitle>
           <AlertDescription>
-            The Terms of Service are being drafted and must be reviewed before public launch. They will be published here, with a version date, before any listing goes live.
+            The Terms of Service are still being drafted and reviewed. This
+            placeholder does not set terms for a public service; a dated policy
+            is required before launch.
           </AlertDescription>
         </Alert>
 
         <p className="text-sm text-muted-foreground text-pretty">
-          Nothing on this page is in force today. No accounts exist, no
-          listings are published, and no user data is collected by this site.
+          The development site can contain accounts and listings. Their presence
+          does not mean this policy is complete or that the site is ready for
+          public use.
         </p>
 
         <Button asChild variant="outline" size="lg" className="h-11 self-start">

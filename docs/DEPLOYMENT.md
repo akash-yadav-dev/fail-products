@@ -11,14 +11,14 @@ FailProducts uses:
 - ZeptoMail;
 - Cloudflare Turnstile.
 
-Cloudflare’s current documentation recommends **vinext** as the default path for new Next.js applications on Workers. The documented workflow supports creating or migrating a Next.js app, checking compatibility, developing with vinext, and deploying with `@vinext/cloudflare`. vinext is currently beta, so upgrades must be compatibility-tested before production rollout.
+Cloudflare currently recommends **vinext** for new Next.js applications on Workers. This repository uses the documented **OpenNext** adapter for its existing Next.js 16 app while vinext compatibility remains unverified. The first vinext build exhausted the available Windows build resources; OpenNext completed `next build` but its Windows packaging requires symlink privileges. The Linux CI Worker build is the required adapter check. Reconsider vinext after a measured Linux build and route smoke test.
 
 ## 2. Environment model
 
 Use three logical environments:
 
 - local;
-- preview;
+- staging preview from `dev`;
 - production.
 
 Do not create extra infrastructure environments until needed.
@@ -34,6 +34,13 @@ ZeptoMail credentials, R2 credentials, Turnstile credentials, and `JOB_TRIGGER_S
 Playwright server to exercise error and authenticated dashboard flows. Never set either in preview
 or production.
 
+`LEGAL_CONTACT_EMAIL` is the public mailbox shown on `/takedown` for
+correction, delist, and data requests. The page shows a setup warning when the
+address is absent or invalid. Before launch, configure a project-domain
+mailbox, send a real request through it, verify receipt and response handling,
+and record requests and outcomes as `LEGAL.md` §6 requires. A configured link
+alone does not prove the mailbox works.
+
 ### Local
 
 - local `.env.local`;
@@ -41,16 +48,16 @@ or production.
 - local test/mock email adapter;
 - local R2 emulator or dev bucket where practical.
 
-### Preview
+### Staging preview
 
-- isolated deployment;
-- non-production database branch;
+- isolated `failproducts-staging` Worker on its `workers.dev` domain;
+- `PREVIEW_ONLY=1` with no database credential: only editorial pages, `/demo`, and the liveness endpoint are available;
 - no production email recipients by default;
-- safe sample content.
+- fictional SaaS samples clearly labeled as such; crawlers receive `noindex` and robots disallow.
 
 ### Production
 
-- production domain;
+- `failproducts` Worker from `main`; use its `workers.dev` domain until the custom domain launch gate is cleared;
 - production Neon database;
 - production R2 bucket;
 - production ZeptoMail sender;
@@ -166,8 +173,17 @@ Authenticated product creation may rely on rate limits without Turnstile initial
 
 ## 8. Build/deploy checks
 
-The repository currently has no production deployment workflow. CI verifies the application and
-does not deploy Workers. GitHub's dependency-review action is enabled only when the repository
+CI builds the Cloudflare Worker on Linux after the application checks. On a successful push to
+`dev`, the deploy job builds with `PREVIEW_ONLY=1` and deploys the staging Worker. On a successful
+push to `main`, it deploys the production Worker only when the GitHub production environment
+sets `PRODUCTION_READY=true`. Both deployments require environment secrets
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; missing configuration produces an explicit
+skip. The Cloudflare token must be scoped to Workers editing for this account. Configure runtime
+secrets separately in Cloudflare before enabling production. Do not use `.env.local` for CI.
+`main` and `dev` are changed only by reviewed pull requests, so the deployment starts after a
+merge. Cloudflare's `workers.dev` domain is the initial target; no custom domain is attached.
+
+GitHub's dependency-review action is enabled only when the repository
 Dependency graph is enabled and the `DEPENDENCY_REVIEW_ENABLED` repository variable is set to
 `true`; until then CI reports an explicit skip and runs `pnpm audit` for production dependencies.
 
@@ -179,7 +195,7 @@ Lint
 Unit tests
 Integration tests (where configured)
 Next.js build
-vinext compatibility/build check
+OpenNext Worker build on Linux
 Migration validation
 ```
 

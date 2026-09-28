@@ -227,9 +227,9 @@ Deployment verification unavailable.
   Decision: irrelevant to this change — proceed
 ```
 
-While the repository is pre-implementation, `pnpm lint`, `typecheck`, `test`, and `build` are
-`NOT_APPLICABLE — pre-implementation`. Reporting them as `PASS` would be a fabricated green
-build, which is worse than no build at all.
+The application is implemented, so `pnpm lint`, `typecheck`, `test`, and `build`
+must be run for applicable changes. A check that is skipped or cannot run is
+reported as `NOT_VERIFIED`, never as a passing build.
 
 ## 9. Report format
 
@@ -355,9 +355,9 @@ premature infrastructure [`AGENTS.md`](../AGENTS.md) §6 rejects.
 Stated plainly, because a verification system that hides its gaps is worse than one that does
 not.
 
-- **No application exists yet.** Import-graph impact analysis, regression detection, and browser
-  verification have nothing to run against. They report `NOT_APPLICABLE — pre-implementation`
-  and will become real when `src/` does.
+- **Local verification has a boundary.** Source, tests, and a Next.js build do
+  not prove Workers compatibility, provider delivery, cache behavior, or a
+  production deployment. Report those as `NOT_VERIFIED` until checked there.
 - **Consumer detection is textual.** `grep` finds identifiers, not a resolved import graph. It
   will miss dynamic imports and re-exports, and it will produce false positives on common names.
 - **AI review is not repeatable.** Two runs can differ. That is why deterministic checks are

@@ -76,13 +76,12 @@ Report reasons:
 
 ## 6. Moderation states
 
-For products:
+For products, publication and moderation are separate (ADR-013):
 
-- pending;
-- published;
-- flagged;
-- hidden;
-- removed.
+- owner-controlled `publication_state`: `DRAFT`, `PENDING_REVIEW`, `PUBLISHED`, `ARCHIVED`;
+- moderator-controlled `moderation_state`: `NONE`, `FLAGGED`, `HIDDEN`, `REMOVED`.
+
+The owner's `failure_status` is a third field and is not a moderation decision.
 
 For comments:
 
@@ -159,7 +158,7 @@ Playful announcements must be based on actual observable data.
 
 Good:
 
-> “FailProducts sent 2,400 outbound visits to this product in the last 7 days.”
+> “FailProducts recorded 2,400 outbound link clicks to this product in the last 7 days.”
 
 Not acceptable:
 

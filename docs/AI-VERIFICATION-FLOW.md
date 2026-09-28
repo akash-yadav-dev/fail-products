@@ -109,7 +109,7 @@ Selected:
            impact-analyzer — radius below CROSS-FEATURE, no contract moved
 
 Automated checks:
-  Gate: PASS · Lint/Typecheck/Tests/Build: NOT_APPLICABLE — pre-implementation
+  Gate: PASS · Lint/Typecheck/Tests/Build: NOT_APPLICABLE — historical documentation-only example
 
 Findings: none
 Rollback: EASY — redeploy the previous version

@@ -59,8 +59,8 @@ feature/* | fix/* | docs/* | security/*
 
 `dev` is an integration branch, not a working branch: it is written to by merge only.
 `main` accepts merges **from `dev` only**, so nothing reaches the release branch that
-was not first integrated and verified. No deployment is attached to either branch yet —
-see [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
+was not first integrated and verified. CI maps `dev` to staging and `main` to production;
+production also requires its readiness gate. See [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
 
 Agents open PRs. Agents do not approve, merge, or force-push. Configuration lives in
 [`.github/BRANCH-PROTECTION.md`](.github/BRANCH-PROTECTION.md).
