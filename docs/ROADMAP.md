@@ -1,5 +1,30 @@
 # FailProducts — MVP Roadmap
 
+## Current position — 2026-09-28
+
+This is the implementation order, not a claim that the site is deployed. The
+[site audit](../audit-reports/2026-09-28-site-progress-deployment-audit.md)
+records the checked evidence and its limits. The [remediation status](../audit-reports/2026-09-28-remediation-and-launch-plan.md)
+tracks fixes and remaining gates. [Public Content](./PUBLIC-CONTENT.md)
+lists the pages and the real-story publication requirements. Historical notes
+under `.plans/` are working records; this roadmap and the source code determine
+the current status.
+
+| Workstream | State | Next proof needed |
+| --- | --- | --- |
+| Core routes, auth, comments, waitlist, referrals | Implemented locally | Full database-backed E2E on an isolated development branch, then provider-backed preview checks. |
+| Product editing and publication | In the current uncommitted working tree | Make state/history and rename writes atomic; review authorization and transitions, run integration and E2E, then land through the branch/PR gate. |
+| Product media and complete submission fields | Incomplete | Decide the minimal launch field set against `PRODUCT.md`; add and verify the R2 transport. |
+| Legal pages and request handling | Terms/Privacy placeholders; conditional contact link | Dated, reviewed policies; configure and test `LEGAL_CONTACT_EMAIL`, then operate and log account-free requests. |
+| Workers deployment | OpenNext configuration and branch-mapped CI added; Linux Worker build and local staging runtime smoke check passed on PR #20; hosted deployment remains unverified | Set scoped Cloudflare environment secrets, merge to `dev`, smoke-test the isolated hosted preview, then clear production integrations, caching, rollback, and monitoring gates. |
+| Real owner stories | Not verified | Owner approval and enough useful narratives and category coverage; fictional `/demo` samples do not count. |
+
+**Order:** finish the product control slice; settle the minimum submission and
+media scope; make a safe preview deployment; verify integrations and operations;
+publish reviewed policies and owner stories; then run the Phase 5 release gate.
+No new database, queue, cache, or search service is justified by the present
+evidence (`ARCHITECTURE.md` §10).
+
 ## Phase 0 — Foundation
 
 Goal: working skeleton with safe architecture.

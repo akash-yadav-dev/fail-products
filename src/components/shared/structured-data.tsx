@@ -8,8 +8,8 @@ import { siteConfig } from "@/lib/config/site";
  * Never mark up a community opinion as a review." That rules out more than it
  * allows here, and the omissions are the point:
  *
- * - **No `Review` or `AggregateRating`.** Comments do not exist yet (Phase 3),
- *   and when they do they are community opinion — `docs/LEGAL.md` §3 forbids
+ * - **No `Review` or `AggregateRating`.** Comments are community opinion;
+ *   `docs/LEGAL.md` §3 forbids
  *   rendering that in the position of a verified fact, and a `Review` in
  *   structured data is exactly that, published to search engines as a rating of
  *   a named real business.

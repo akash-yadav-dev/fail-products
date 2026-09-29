@@ -77,7 +77,7 @@ Then the one that matches your task: [`SECURITY.md`](./docs/SECURITY.md),
 [`MODERATION.md`](./docs/MODERATION.md), [`LEGAL.md`](./docs/LEGAL.md),
 [`DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 
-**Documentation is the specification.** The repository is pre-implementation: code follows the
+**Documentation is the specification.** Implementation is underway: code follows the
 docs, not the reverse. A change that contradicts a doc updates that doc *in the same PR*.
 
 Where a doc and the code genuinely disagree, report the discrepancy. Prefer the implementation

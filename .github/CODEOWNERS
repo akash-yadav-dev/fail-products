@@ -9,6 +9,7 @@
 /.githooks/             @akash-yadav-dev
 /.claude/               @akash-yadav-dev
 /docs/SECURITY.md       @akash-yadav-dev
+/SECURITY.md            @akash-yadav-dev
 /docs/LEGAL.md          @akash-yadav-dev
 /docs/DECISIONS.md      @akash-yadav-dev
 /drizzle/               @akash-yadav-dev

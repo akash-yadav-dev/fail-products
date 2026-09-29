@@ -116,7 +116,7 @@ export default async function DashboardPage() {
       >
         <MetricCard
           label="Outbound clicks"
-          hint="Visitors this site sent on to your products. Clicks, not people — nothing here identifies a visitor."
+          hint="Clicks from FailProducts to your websites. This is not a count of unique people."
           icon={MousePointerClick}
           value={formatCount(totalClicks)}
         />

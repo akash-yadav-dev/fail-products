@@ -279,7 +279,13 @@ export async function changePublicationState(input: {
     actorRole: "OWNER",
   });
 
-  return { id: input.productId, publicationState: input.to };
+  return {
+    id: input.productId,
+    publicationState: input.to,
+    isPublic:
+      input.to === "PUBLISHED" &&
+      (product.moderationState === "NONE" || product.moderationState === "FLAGGED"),
+  };
 }
 
 /**

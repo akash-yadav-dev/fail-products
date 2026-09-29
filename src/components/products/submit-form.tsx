@@ -156,9 +156,10 @@ export function SubmitForm({ action }: { action: SubmitAction }) {
           select's own name, so NO_CATEGORY can mean "no category" on the wire
           instead of being sent as a slug the server would reject. A Radix
           Select offers no way back to unselected once a value is chosen, so
-          without an explicit item the choice was one-way — on a form that is
-          currently a founder's only shot at their own record, there being no
-          edit surface yet (docs/MODERATION.md §7).
+          without an explicit item the choice was one-way — and it is still the
+          founder's only shot at the category, because the edit surface does not
+          change it: a fixed taxonomy resolved at submit is ADR-026's design
+          (docs/MODERATION.md §7).
         */}
         <input
           type="hidden"
