@@ -1124,3 +1124,48 @@ instruction, and no evidence justifies that.
 Any future email surface — a founder update, a comeback announcement — inherits this: it sends
 to `CONFIRMED` entries only. A feature that needs to mail pending addresses is a feature that
 needs a different lawful basis, not a different query.
+
+## ADR-030 — Preserve ancestry in dev-to-main promotions
+
+**Status:** Accepted
+**Date:** 2026-09-29
+
+### Decision
+
+Every pull request into `main` must come from `dev`. A required CI check validates the source
+branch and runs Git's three-way merge analysis; a promotion with conflicts fails before merge.
+Both protected branches allow only merge commits, so feature integration and release promotion
+preserve commit ancestry.
+
+### Reason
+
+Squash and rebase promotions rewrite commit IDs. The release and integration branches then lose
+the promoted commits as shared ancestors, so later promotions repeatedly combine independent
+changes to the same files. PRs #17 and #18 attempted ancestry repairs, but those repairs were
+also squash merged and therefore did not restore ancestry. PR #21 currently has conflicts in
+six application files.
+
+A merge commit on the release PR records the exact `dev` tip as a parent. Future changes on
+`dev` share that tip with `main`, so the next promotion starts from the right common ancestor.
+The CI check is still required: it catches a source-branch mistake or a genuine file conflict
+before a human spends time reviewing an unmergeable promotion.
+
+### Rejected alternatives
+
+- **Continue squash or rebase merging promotions.** This repeats the history rewrite that
+  caused the recurring conflicts.
+- **Resolve conflicts by repeatedly choosing one branch's files.** This can discard valid
+  fixes and does not repair the commit graph.
+- **Let any branch target `main`.** That bypasses the verified integration branch.
+
+### Consequences
+
+Neither protected branch has linear history. Their only allowed PR merge method is a merge
+commit. Before enabling merge commits, the maintainer must verify that GitHub account email
+privacy and command-line email blocking are enabled. The repository token used to apply
+rulesets cannot inspect those account settings. Until verified, the merge-commit setting is
+unverified and no protected-branch merge commit may be created.
+
+The first promotion PR after this decision must follow a one-time reconciliation merge from
+`main` into `dev`; that merge and the promotion itself both preserve ancestry. Do not squash or
+rebase either protected-branch PR.

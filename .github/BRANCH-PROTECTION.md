@@ -31,8 +31,8 @@ exists. The app targets separate `workers.dev` Workers and no custom domain yet.
 
 ## Branch protection — `main` and `dev`
 
-**Settings → Rules → Rulesets → New branch ruleset.** Create two, one per branch, because they
-differ in one setting only (see the last row).
+**Settings → Rules → Rulesets → New branch ruleset.** Create two, one per branch, because the
+release branch must preserve promotion ancestry.
 
 | Setting | `main` | `dev` | Why |
 |---|---|---|---|
@@ -40,18 +40,39 @@ differ in one setting only (see the last row).
 | Required approvals | **1** | **1** | Every change gets a human review |
 | Dismiss stale approvals on new commits | ✅ | ✅ | An approval applies to reviewed code, not to whatever lands after |
 | Require review from Code Owners | ✅ | ✅ | Pairs with `CODEOWNERS` |
-| Require status checks to pass | ✅ | ✅ | `Repository hygiene`, `Lint, typecheck, test, build`, `End-to-end` |
+| Require status checks to pass | ✅ | ✅ | Main also requires `Promotion source and conflict analysis` |
 | Require branches to be up to date | ✅ | ✅ | Prevents semantic conflicts merging clean |
 | Require signed commits | ✅ | ✅ | Recommended once commit signing is configured |
-| Require linear history | ✅ | ✅ | Keeps `git log` readable |
+| Require linear history | ❌ | ❌ | Merge commits preserve shared ancestry |
+| Allowed merge method | **Merge commit only** | **Merge commit only** | Prevents promotion and integration history from being rewritten |
 | Block force pushes | ✅ | ✅ | History is immutable |
 | Restrict deletions | ✅ | ✅ | |
 | Restrict who can push (bypass list) | admin, **PR only** | admin, **PR only** | See below |
-| Restrict merges to specific branches | **`dev` only** | — | Production is only ever promoted from a verified preview |
+| Restrict merges to specific branches | Enforced by required CI check: `dev` only | — | Rulesets cannot directly constrain a PR head branch |
 
-The last row is the one that makes the promotion path real rather than a convention. On the
-`main` ruleset, set the required merge source so a feature branch cannot open a PR straight
-into `main` and skip preview verification entirely.
+The required CI check rejects any PR to `main` whose head branch is not `dev`, and uses
+`git merge-tree` to reject a promotion with conflicts. GitHub rulesets do not have a native
+source-branch restriction, so this named required status check is the enforcement point.
+
+## Why main requires merge commits
+
+Previous promotions were squash or rebase merged. Both create new commit IDs on `main`, so
+`main` and `dev` no longer share the promoted commits as ancestors. The attempted ancestry
+repairs in PRs #17 and #18 were also squash merged, so they did not repair the graph. The next
+promotion repeatedly attempted to combine independently rewritten changes and conflicted in
+shared application files.
+
+The permanent rule is: reconcile the current tree on `dev`; open the release PR from `dev` to
+`main`; require the source-and-conflict check; merge it with a merge commit. The merge commit
+keeps the exact `dev` tip as a parent. Future work on `dev` then shares that tip as its merge
+base with `main`, avoiding repeated conflicts from rewritten promotion history. Both protected
+branches are merge-commit-only so neither integration nor promotion history can be rewritten.
+
+**Account email privacy is a prerequisite.** GitHub authors a merge-button commit using the
+merging account. Before enabling merge commits, verify in GitHub account Settings → Emails that
+“Keep my email addresses private” and “Block command line pushes that expose my email” are on.
+The available repository token cannot read those account settings. Until verified, the merge
+commit policy must remain unapplied and no promotion merge commit may be created.
 
 ### Bypass configuration — corrected
 
@@ -217,7 +238,7 @@ Then, on GitHub:
 The fourth row is the one to check first: if it is **not** mergeable, the bypass mode was left
 empty or set to something other than "For pull requests only", and every future PR will stall.
 
-### Measured state — 2026-09-04
+### Measured state before the promotion rule — 2026-09-29
 
 Read from the API rather than assumed, after `scripts/apply-branch-protection.sh` was run.
 Two rulesets exist and are **active**, one per branch, and both now carry five rules:
@@ -230,9 +251,9 @@ Two rulesets exist and are **active**, one per branch, and both now carry five r
 | `required_linear_history` | ✅ | ✅ |
 | `required_status_checks` — `Repository hygiene`, `Lint, typecheck, test, build`, `End-to-end` | ✅ | ✅ |
 
-Repository metadata now matches the specification too: `allow_merge_commit` is **false**,
-squash and rebase are the only merge methods, `delete_branch_on_merge` is on, and the wiki is
-disabled.
+Repository metadata currently has `allow_merge_commit` **false**, squash and rebase enabled,
+`delete_branch_on_merge` on, and the wiki disabled. This is the observed pre-change state; run
+`scripts/apply-branch-protection.sh` only after verifying the account email privacy prerequisite.
 
 **CI is a merge gate now.** That is a change in kind, not degree: a red pipeline stops a merge
 rather than merely embarrassing it, and the first thing it stopped was the `dev -> main`
@@ -247,17 +268,16 @@ promotion pull request. Two consequences that were not obvious until it was swit
   warning rather than blocking a release nobody can unblock. A commit somebody actually wrote is
   still a hard failure.
 
-Still not configured, and still worth knowing:
+Still not configured in the observed live state:
 
 | Promised above | Configured | Consequence while it is missing |
 |---|---|---|
 | Require signed commits | ❌ | Deliberate. Signing is not set up here, and requiring it would make every pull request unmergeable — including the one that would configure signing |
-| Restrict merges to `dev` only (on `main`) | ❌ | A feature branch can still open a pull request straight into `main` and skip integration. GitHub rulesets cannot express "only from this branch", so this stays a convention enforced by review |
+| Restrict merges to `dev` only (on `main`) | ❌ | The new required check must be applied after its workflow reaches `dev` |
 
-The private-address leak in existing history is unchanged by any of this: five merge commits
-carry the account's primary address, two of them reachable from `main`. Turning
-`allow_merge_commit` off stops new ones. It does not remove the published ones, and only a
-history rewrite would — which is the owner's decision, not a gate's.
+The private-address leak in existing history is unchanged: five historical merge commits carry
+the account's primary address, two reachable from `main`. Enabling merge commits is conditional
+on verifying account email privacy first; it does not rewrite those commits.
 
 To read the same thing back at any time:
 
@@ -285,10 +305,9 @@ bash scripts/apply-branch-protection.sh --dry-run   # print what would change
 bash scripts/apply-branch-protection.sh             # apply
 ```
 
-It sets both rulesets to `deletion`, `non_fast_forward`, `required_linear_history`,
-`required_status_checks` (the three job names, strict) and `pull_request` (1 approval, code-owner
-review, dismiss stale approvals, squash and rebase only), then sets the repository merge
-settings. It is idempotent — rerunning it is how the Measured state section stays green.
+It sets both branches to `deletion`, `non_fast_forward`, strict required checks, and
+merge-commit-only PRs. `main` also requires the promotion gate. It disables squash and rebase at
+the repository level. It is idempotent.
 
 Two things it deliberately does **not** do:
 
@@ -297,12 +316,10 @@ Two things it deliberately does **not** do:
 - **It does not touch account email privacy.** Those are account settings, not repository
   settings, and no repository-scoped token can reach them. They remain a manual step.
 
-`allowed_merge_methods` drops `merge`. Every private-address leak in this repository's history
-came from a GitHub merge-button commit, which is authored with the account's primary address
-rather than the repo-local identity; squash and rebase merges do not create one. That narrows
-the leak surface — it is not the fix, and it does not undo the five commits already published.
+`allowed_merge_methods` on `main` is `merge` only. This setting must not be applied until the
+account email privacy prerequisite above is verified; a GitHub merge commit can otherwise
+publish the maintainer's primary address.
 
 One caveat, learned by running it: the rulesets **list** endpoint returns every ruleset with
 `conditions: null`, so the target branch can only be read from each ruleset's own detail
 endpoint. Matching on the list silently finds nothing and reports the ruleset as missing.
-

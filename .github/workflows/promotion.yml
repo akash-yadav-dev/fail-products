@@ -1,0 +1,43 @@
+name: Promotion gate
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  promotion:
+    name: Promotion source and conflict analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+
+      - name: Enforce dev-only, conflict-free promotions
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$BASE_BRANCH" != "main" ]; then
+            echo "This is not a promotion to main; no promotion checks are needed."
+            exit 0
+          fi
+
+          if [ "$HEAD_BRANCH" != "dev" ]; then
+            echo "::error::Pull requests to main must come from dev."
+            exit 1
+          fi
+
+          git fetch --no-tags origin main dev
+          if ! git merge-tree --write-tree "$BASE_SHA" "$HEAD_SHA"; then
+            echo "::error::The dev-to-main promotion has conflicts. Reconcile it on dev, then update the promotion PR."
+            exit 1
+          fi
