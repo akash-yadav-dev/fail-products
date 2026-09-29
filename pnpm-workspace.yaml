@@ -19,3 +19,6 @@
 allowBuilds:
   esbuild: false
   unrs-resolver: false
+  # The platform binary is supplied by @cloudflare/workerd-*. The install
+  # script only checks it and may fetch a fallback; keep install scripts denied.
+  workerd: false

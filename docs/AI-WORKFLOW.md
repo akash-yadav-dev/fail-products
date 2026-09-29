@@ -200,9 +200,10 @@ push succeed.
 
 - **hygiene** — always. The verification gate, documentation link check, agent and skill
   frontmatter validation, MCP example JSON validation.
-- **app** — `pnpm lint`, `typecheck`, `test`, `build`. Skipped while there is no `package.json`;
-  the repository is pre-implementation and a fabricated green build would be worse than none.
-- **e2e** — Playwright, once a config exists.
+- **app** — `pnpm lint`, `typecheck`, `test`, `build`. The workflow retains a
+  missing-`package.json` guard for older or partial checkouts; this repository
+  currently has an application.
+- **e2e** — Playwright; the config is present.
 - **dependencies** — dependency review on pull requests, with a licence deny-list for
   AGPL-3.0-only distribution.
 

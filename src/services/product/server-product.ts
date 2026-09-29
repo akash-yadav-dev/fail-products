@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { getDb } from "@/db";
 import { findFailureStatus, type FailureStatus } from "@/domain/product/failure-status";
+import { can, type Viewer } from "@/domain/product/permissions";
 import { canSkipDatabaseAtBuild } from "@/lib/config/database";
 import { ProductRepository } from "@/repositories/product-repository";
 import { RateLimitRepository } from "@/repositories/rate-limit-repository";
@@ -143,6 +144,26 @@ export const resolvePublicProduct = cache((slug: string) => {
 
 export function listOwnedProducts(ownerId: string) {
   return repository().listByOwner(ownerId);
+}
+
+/**
+ * One of the viewer's own listings, for the edit form.
+ *
+ * Returns `null` for a product that does not exist **and** for one that exists
+ * but is not theirs. The caller turns both into the same 404: an edit route
+ * that answered "forbidden" for a real id and "missing" for a fake one would
+ * let anyone enumerate product ids by watching which answer they got
+ * (`docs/SECURITY.md` §3).
+ *
+ * The decision is the domain's `can`, not a comparison written here — the same
+ * matrix `authorize` enforces in the service layer, so the page cannot disagree
+ * with the action about who may edit what.
+ */
+export async function findEditableProduct(viewer: Viewer, productId: string) {
+  const product = await repository().findForAuthorization(productId);
+  if (!product) return null;
+
+  return can(viewer, "edit", product) ? product : null;
 }
 
 /**

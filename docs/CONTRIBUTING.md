@@ -6,7 +6,8 @@ FailProducts is designed as an open-source project with a hosted public director
 
 The open-source repository contains the application and core product logic.
 
-The hosted FailProducts deployment is operated as the canonical public instance.
+The planned hosted FailProducts deployment will be the canonical public instance.
+No public deployment is verified yet.
 
 No paid features are part of the MVP.
 
@@ -90,25 +91,20 @@ Open an issue before large PRs for:
 
 ## 7. Branching
 
-Use a small workflow:
+Use the protected integration path:
 
 ```text
-main
-  ↑
-feature/fix branch
-  ↓
-PR
-  ↓
-review + checks
-  ↓
-merge
+feature/fix/docs branch → PR + review + checks → dev
+dev → PR + review + checks → main
 ```
 
-`main` is protected. Nobody pushes to it directly — not contributors, not the maintainer, not
-automated tooling. Every change arrives through a reviewed pull request with passing checks.
+`dev` and `main` are protected. Contributors branch from `dev`; neither protected
+branch receives direct pushes. Every change arrives through a reviewed pull
+request with passing checks.
 The exact settings are in [`.github/BRANCH-PROTECTION.md`](../.github/BRANCH-PROTECTION.md).
 
-Do not maintain long-lived release branches in MVP.
+`dev` is the integration branch and `main` is the release branch, not a working
+branch. `CLAUDE.md` §2 has the full branch rules.
 
 ## 8. Pull request expectations
 

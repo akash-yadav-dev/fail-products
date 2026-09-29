@@ -68,7 +68,7 @@ what the system observed. It does not judge.
 |---|---|
 | "This product failed." | "The founder listed this product as abandoned." |
 | "Nobody uses this." | "The founder reported low traction." |
-| "This product now has 2,400 visitors." | "FailProducts sent 2,400 outbound visits in the last 7 days." |
+| "This product now has 2,400 visitors." | "FailProducts recorded 2,400 outbound link clicks in the last 7 days." |
 | "The founder mismanaged launch." | Community comment, attributed and labelled as opinion. |
 
 Every factual assertion on a public page carries its source tier: **creator claim**,
@@ -190,7 +190,7 @@ recorded in `CLAUDE.md` §1 and §4.
 
 - [ ] Terms of Service drafted and reviewed
 - [ ] Privacy Policy drafted and reviewed
-- [ ] delist / data-subject-request route built and reachable without an account
+- [ ] configure and verify the account-free `/takedown` mailbox; log and handle requests
 - [ ] `legal@` or equivalent contact address on the project domain
 - [ ] operator's jurisdiction and governing law decided
 - [ ] whether the operator is trading as an individual or an entity decided

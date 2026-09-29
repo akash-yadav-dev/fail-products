@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "failproducts",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "observability": { "enabled": true },
+  "env": {
+    "staging": {
+      "name": "failproducts-staging",
+      "vars": { "PREVIEW_ONLY": "1" }
+    },
+    "production": {
+      "name": "failproducts",
+      "vars": { "PREVIEW_ONLY": "0" }
+    }
+  }
+}

@@ -157,6 +157,37 @@ export async function seedProductWithRetiredSlug(): Promise<
   };
 }
 
+/**
+ * A draft for an account that already exists.
+ *
+ * The publish spec needs a listing that is *not* public yet, owned by the
+ * browser's own session — so the two fixtures are combined here rather than
+ * inventing a third account. Written through the service so the slug and the
+ * opening state are what the application would have produced; a raw insert
+ * could set a state the state machine cannot reach.
+ */
+export async function seedDraftProductFor(
+  owner: { userId: string; username: string },
+  name = `E2E Draft ${unique("d")}`
+): Promise<SeededProduct> {
+  const created = await createProduct({
+    repository: new ProductRepository(db()),
+    ownerId: owner.userId,
+    name,
+    tagline: "Submitted, then never published.",
+    websiteUrl: "https://example.com/",
+    failureStatus: "STRUGGLING",
+  });
+
+  return {
+    id: created.id,
+    slug: created.slug,
+    name,
+    ownerId: owner.userId,
+    ownerUsername: owner.username,
+  };
+}
+
 export async function removeSeededProduct(seeded: SeededProduct) {
   const database = db();
   // product_slug_history.product_id is ON DELETE SET NULL, so the retired slug
@@ -164,4 +195,12 @@ export async function removeSeededProduct(seeded: SeededProduct) {
   // means this cleanup cannot free a slug for reuse.
   await database.delete(products).where(eq(products.id, seeded.id));
   await database.delete(users).where(inArray(users.id, [seeded.ownerId]));
+}
+
+/** Test-only moderation state for owner-facing visibility copy. */
+export async function hideSeededProduct(seeded: SeededProduct) {
+  await db()
+    .update(products)
+    .set({ moderationState: "HIDDEN" })
+    .where(eq(products.id, seeded.id));
 }

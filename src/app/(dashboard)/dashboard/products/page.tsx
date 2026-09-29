@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DashboardPageHeader } from "@/components/dashboard/dashboard-page-header";
+import { PublicationControls } from "@/components/products/publication-controls";
 import { StatusBadge } from "@/components/products/status-badge";
 import type { FailureStatus } from "@/domain/product/failure-status";
 import { WaitlistToggle } from "@/components/waitlist/waitlist-toggle";
@@ -31,7 +32,7 @@ import {
   listOwnedProducts,
 } from "@/services/product/server-product";
 import { subscriberCountsByProduct } from "@/services/waitlist/server-waitlist";
-import { setWaitlistEnabledAction } from "./actions";
+import { setPublicationStateAction, setWaitlistEnabledAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Your products",
@@ -56,8 +57,8 @@ const COLUMNS = [
  *
  * The badge alone lived in a `hidden md:table-cell` column, so a founder on a
  * phone whose listing had been taken down saw an ordinary row and a public
- * 404. `docs/MODERATION.md` §10 requires a removal and appeal contact path,
- * and a path nobody can find is not one.
+ * 404. `docs/MODERATION.md` §10 requires an appeal contact path before launch;
+ * while it is missing, the linked page states that plainly.
  */
 function moderationNotice(
   state: string
@@ -166,7 +167,7 @@ export default async function DashboardProductsPage() {
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">
-                          <span className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1">
                             <span>{item.name}</span>
                             <span className="text-xs text-muted-foreground">
                               /products/{item.slug}
@@ -176,7 +177,8 @@ export default async function DashboardProductsPage() {
                               In the name cell, which is the one column that
                               survives to 360px. What the moderator was
                               required to record is shown to the person it is
-                              about, with the date and a route to object.
+                              about, with the date and the current process
+                              status. The contact path is still a launch gate.
                             */}
                             {notice ? (
                               <span className="mt-1 flex flex-col gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 text-xs font-normal">
@@ -213,11 +215,25 @@ export default async function DashboardProductsPage() {
                                   href="/takedown"
                                   className="w-fit rounded-sm font-medium underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                                 >
-                                  Ask about this or appeal
+                                  Takedown process status
                                 </Link>
                               </span>
                             ) : null}
-                          </span>
+
+                            {/*
+                              The publish controls live in the name cell, the
+                              one column that survives to 360px. A draft that
+                              can only be published from a column hidden below
+                              `md` is a draft a founder on a phone cannot
+                              publish — which is the defect this control
+                              exists to fix.
+                            */}
+                            <PublicationControls
+                              productId={item.id}
+                              publicationState={item.publicationState}
+                              action={setPublicationStateAction}
+                            />
+                          </div>
                         </TableCell>
 
                         <TableCell className="hidden sm:table-cell">

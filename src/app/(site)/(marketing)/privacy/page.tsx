@@ -27,13 +27,16 @@ export default function PrivacyPage() {
         <Alert>
           <AlertTitle>Not published yet</AlertTitle>
           <AlertDescription>
-            The Privacy Policy is being drafted and must be reviewed before public launch. It will name every processor and retention period before any account can be created.
+            The Privacy Policy is still being drafted and reviewed. It must
+            describe the actual data, processors, retention periods, and request
+            path before public launch.
           </AlertDescription>
         </Alert>
 
         <p className="text-sm text-muted-foreground text-pretty">
-          Nothing on this page is in force today. No accounts exist, no
-          listings are published, and no user data is collected by this site.
+          The development site can contain accounts and listings. This
+          placeholder does not describe its data handling and must not be used
+          as a production privacy notice.
         </p>
 
         <Button asChild variant="outline" size="lg" className="h-11 self-start">
