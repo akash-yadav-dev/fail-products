@@ -11,7 +11,7 @@ FailProducts uses:
 - ZeptoMail;
 - Cloudflare Turnstile.
 
-Cloudflare currently recommends **vinext** for new Next.js applications on Workers. This repository uses the documented **OpenNext** adapter for its existing Next.js 16 app while vinext compatibility remains unverified. The first vinext build exhausted the available Windows build resources; OpenNext completed `next build` but its Windows packaging requires symlink privileges. The Linux CI Worker build passed on PR #20; the staging runtime smoke check and a hosted deployment remain required. Reconsider vinext after a measured Linux build and route smoke test.
+Cloudflare currently recommends **vinext** for new Next.js applications on Workers. This repository uses the documented **OpenNext** adapter for its existing Next.js 16 app while vinext compatibility remains unverified. The first vinext build exhausted the available Windows build resources; OpenNext completed `next build` but its Windows packaging requires symlink privileges. The Linux CI Worker build and staging runtime smoke check passed on PR #20. A hosted deployment remains required. Reconsider vinext after a measured Linux build and route smoke test.
 
 ## 2. Environment model
 

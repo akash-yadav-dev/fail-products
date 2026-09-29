@@ -1,6 +1,7 @@
 # Remediation status and launch plan
 
 **Date:** 2026-09-28
+**Pipeline update:** 2026-09-29
 **Basis:** [Site audit](./2026-09-28-site-progress-deployment-audit.md), current working tree, and local checks. The original audit remains a snapshot from before these changes.
 
 ## Completed in this working tree
@@ -16,25 +17,26 @@
 | Documentation drift | Updated the documentation index, contribution branch flow, moderation state/click terminology, workflow wording, roadmap, and release-check command. Added a [public page and content inventory](../docs/PUBLIC-CONTENT.md). | Historical decisions and the earlier audit were preserved as records. |
 | Unused UI code | Removed three UI primitives with no source or test imports: checkbox, pagination, and tabs. | Usage searched before deletion; production Next build passed. |
 | Reviewable sample content | Added three explicitly fictional SaaS examples on `/demo` in development and isolated staging preview. | No database seed; `noindex` and absent from sitemap. The production build returns 404. These are **not** directory listings. |
-| Branch-mapped Workers pipeline | Added OpenNext configuration and CI build/deploy jobs. A merge to `dev` targets `failproducts-staging`; a merge to `main` targets `failproducts` after the production readiness gate. | The Linux Worker build passed on PR #20. The runtime smoke check and a hosted deployment remain **NOT_VERIFIED**. No live Worker or GitHub Cloudflare token exists yet. |
+| Branch-mapped Workers pipeline | Added OpenNext configuration and CI build/deploy jobs. A merge to `dev` targets `failproducts-staging`; a merge to `main` targets `failproducts` after the production readiness gate. | The Linux Worker build and local staging Worker smoke check passed on PR #20. Hosted deployment remains **NOT_VERIFIED**. No live Worker or GitHub Cloudflare token exists yet. |
 
 ## Verification
 
 - `pnpm lint`: pass after excluding generated `.open-next` output.
 - `pnpm audit --prod --audit-level=moderate`: pass after moving the `shadcn` CLI from runtime dependencies to build/development dependencies. `shadcn/tailwind.css` remains a build-time CSS import; no runtime JS import uses the CLI package.
+- GitHub CI on PR #20: lint, typecheck, unit test, production build, dependency review, Linux OpenNext build, and local Workers runtime smoke check passed. The smoke check confirmed `/demo` is noindex, `/products` is blocked in staging, and `robots.txt` disallows crawlers. Database integrations were skipped. The deploy job correctly skipped because this is a PR, not a push to `dev` or `main`.
 - `pnpm typecheck`: pass.
 - `pnpm test:unit`: 32 files and 528 tests passed. The new E2E regression was not included in this count.
 - Credential-free `next build`: pass with `DATABASE_URL` empty while `.env.local` was temporarily held aside, then restored. The current build generated 43 static pages; `/takedown` is dynamic so the contact setting is read at request time. This does not prove Workers compatibility.
 - Production server `/demo`: 404; development server `/demo`: 200. Desktop and phone screenshots were reviewed.
 - Integration tests: **NOT_VERIFIED**. The final gate ran with `.env.local` held out. E2E on GitHub passed without a database, so database-dependent E2E paths were skipped.
 - Verification incident: the first repository-gate attempt invoked the full test command before I noticed it loads `.env.local`; I stopped it. I cannot confirm whether any integration test fixture writes completed before termination. No further database-backed verification was run, and this uncertainty is unresolved.
-- `vinext check` (2026-09-28): reported 92% compatibility before initialization. A temporary vinext setup consumed about 7 GB of memory without completing a build on this host, then was rolled back. The OpenNext attempt completed `next build` but could not package the Worker on Windows because symlink creation was denied. **Linux CI Worker build passed on PR #20; runtime and hosted route behavior remain NOT_VERIFIED.**
+- `vinext check` (2026-09-28): reported 92% compatibility before initialization. A temporary vinext setup consumed about 7 GB of memory without completing a build on this host, then was rolled back. The OpenNext attempt completed `next build` but could not package the Worker on Windows because symlink creation was denied. Linux CI has now built and smoke-tested the Worker runtime; the hosted Cloudflare deployment and domain behavior remain **NOT_VERIFIED**.
 
 ## Remaining work, in order
 
 1. **Finish product controls:** Review the existing uncommitted edit/status/publication slice, run its integration and E2E tests against a separately confirmed disposable development database, and verify moderation transitions and ownership.
 2. **Complete the publication contract:** Decide the smallest useful field and media set against `docs/PRODUCT.md`; implement the missing fields and R2 upload path or explicitly revise the product specification. Verify validation, ownership, storage, rendering, and deletion.
-3. **Establish a Workers preview:** Pass the Linux Worker runtime smoke check, configure scoped Cloudflare GitHub environment secrets, merge to `dev`, and smoke-test the isolated `workers.dev` preview. Reassess vinext, durable caching, and the `next/font/google` behavior before production. Verify migrations, auth, OAuth, mail, Turnstile, R2, scheduler, monitoring, and rollback/restore before enabling the production gate.
+3. **Establish a hosted Workers preview:** Configure scoped Cloudflare GitHub environment secrets, merge to `dev`, and smoke-test the isolated `workers.dev` deployment. Reassess vinext, durable caching, and the `next/font/google` behavior before production. Verify migrations, auth, OAuth, mail, Turnstile, R2, scheduler, monitoring, and rollback/restore before enabling the production gate.
 4. **Make public content real:** Obtain owner approval for stories and media, remove fixtures only from a confirmed test/launch environment, populate useful categories, then add a bounded home discovery section. Fictional `/demo` content stays outside the directory.
 5. **Close policy and operations gates:** Publish reviewed Terms and Privacy content, configure `LEGAL_CONTACT_EMAIL`, verify a real request reaches the mailbox and is logged/handled, then verify provider settings, source link, repository protections, backup restoration, and the full release checklist.
 

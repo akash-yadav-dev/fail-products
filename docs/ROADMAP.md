@@ -16,7 +16,7 @@ the current status.
 | Product editing and publication | In the current uncommitted working tree | Make state/history and rename writes atomic; review authorization and transitions, run integration and E2E, then land through the branch/PR gate. |
 | Product media and complete submission fields | Incomplete | Decide the minimal launch field set against `PRODUCT.md`; add and verify the R2 transport. |
 | Legal pages and request handling | Terms/Privacy placeholders; conditional contact link | Dated, reviewed policies; configure and test `LEGAL_CONTACT_EMAIL`, then operate and log account-free requests. |
-| Workers deployment | OpenNext configuration and branch-mapped CI added; Linux CI Worker build passed on PR #20; staging runtime and hosted deployment remain unverified | Pass the Worker runtime smoke check, set scoped Cloudflare environment secrets, merge to `dev`, smoke-test the isolated preview, then clear production integrations, caching, rollback, and monitoring gates. |
+| Workers deployment | OpenNext configuration and branch-mapped CI added; Linux Worker build and local staging runtime smoke check passed on PR #20; hosted deployment remains unverified | Set scoped Cloudflare environment secrets, merge to `dev`, smoke-test the isolated hosted preview, then clear production integrations, caching, rollback, and monitoring gates. |
 | Real owner stories | Not verified | Owner approval and enough useful narratives and category coverage; fictional `/demo` samples do not count. |
 
 **Order:** finish the product control slice; settle the minimum submission and
