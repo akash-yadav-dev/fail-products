@@ -21,6 +21,7 @@
 ## Verification
 
 - `pnpm lint`: pass after excluding generated `.open-next` output.
+- `pnpm audit --prod --audit-level=moderate`: pass after moving the `shadcn` CLI from runtime dependencies to build/development dependencies. `shadcn/tailwind.css` remains a build-time CSS import; no runtime JS import uses the CLI package.
 - `pnpm typecheck`: pass.
 - `pnpm test:unit`: 32 files and 528 tests passed. The new E2E regression was not included in this count.
 - Credential-free `next build`: pass with `DATABASE_URL` empty while `.env.local` was temporarily held aside, then restored. The current build generated 43 static pages; `/takedown` is dynamic so the contact setting is read at request time. This does not prove Workers compatibility.
