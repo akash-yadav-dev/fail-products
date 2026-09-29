@@ -434,6 +434,27 @@ jobs:
           PREVIEW_ONLY: "1"
           DATABASE_URL: ""
         run: pnpm build:worker
+      - name: Smoke-test staging Worker
+        run: |
+          pnpm exec wrangler dev --local --env staging --ip 127.0.0.1 --port 8787 > /tmp/failproducts-worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8787/api/health > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/failproducts-worker.log
+            exit 1
+          fi
+          curl --silent --show-error --fail --dump-header /tmp/demo-headers --output /dev/null http://127.0.0.1:8787/demo
+          grep -qi '^x-robots-tag: noindex, nofollow' /tmp/demo-headers
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8787/products)" = 404
+          curl --silent --show-error --fail http://127.0.0.1:8787/robots.txt | grep -q 'Disallow: /'
 
   deploy:
     name: Deploy Cloudflare Worker
