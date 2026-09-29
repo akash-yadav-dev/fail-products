@@ -24,54 +24,18 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 2
 fi
 
-# The contexts must match the job `name:` values in .github/workflows/ci.yml
+# The contexts must match the job `name:` values in the workflow files
 # exactly. A required check that never reports is indistinguishable from one
-# that has not finished, and the pull request waits forever. These three are the
-# jobs that always run; "Detect application" is a plumbing job and "Dependency
-# review" only runs on pull_request and is skipped until the Dependency graph is
-# enabled, so neither is required.
-read -r -d '' RULES <<'JSON' || true
-[
-  { "type": "deletion" },
-  { "type": "non_fast_forward" },
-  { "type": "required_linear_history" },
-  {
-    "type": "required_status_checks",
-    "parameters": {
-      "strict_required_status_checks_policy": true,
-      "do_not_enforce_on_create": false,
-      "required_status_checks": [
-        { "context": "Repository hygiene" },
-        { "context": "Lint, typecheck, test, build" },
-        { "context": "End-to-end" }
-      ]
-    }
-  },
-  {
-    "type": "pull_request",
-    "parameters": {
-      "allowed_merge_methods": ["squash", "rebase"],
-      "dismiss_stale_reviews_on_push": true,
-      "require_code_owner_review": true,
-      "require_extra_approval_for_unattributed_changes": true,
-      "require_last_push_approval": true,
-      "required_approving_review_count": 1,
-      "required_review_thread_resolution": false,
-      "required_reviewers": []
-    }
-  }
-]
-JSON
-
+# that has not finished, and the pull request waits forever.
 # Deliberately absent: `required_signatures`. Commit signing is not configured
 # in this repository, so requiring it would make every future pull request
 # unmergeable — including the one that would configure signing.
 #
-# `allowed_merge_methods` drops "merge". Every private-address leak in this
-# repository's history came from a GitHub merge-button commit, which is authored
-# with the account's primary address rather than the repo-local identity. Squash
-# and rebase merges do not create one. That is a narrowing of the leak surface,
-# not a fix — the account-level settings in BRANCH-PROTECTION.md are the fix.
+# Promotion to main must use a merge commit so the promoted dev tip remains an
+# ancestor of main. This prevents repeated three-way conflicts caused by
+# squash/rebase promotions rewriting the shared history. Both protected
+# branches therefore use merge commits. Account email privacy is a prerequisite;
+# see .github/BRANCH-PROTECTION.md.
 
 # The list endpoint returns rulesets without their `conditions` — every entry
 # reports `include: null` — so the target branch can only be read from each
@@ -90,6 +54,75 @@ ruleset_for_branch() {
   return 1
 }
 
+branch_rules() {
+  if [ "$1" = main ]; then
+    cat <<'JSON'
+[
+  { "type": "deletion" },
+  { "type": "non_fast_forward" },
+  {
+    "type": "required_status_checks",
+    "parameters": {
+      "strict_required_status_checks_policy": true,
+      "do_not_enforce_on_create": false,
+      "required_status_checks": [
+        { "context": "Repository hygiene" },
+        { "context": "Lint, typecheck, test, build" },
+        { "context": "End-to-end" },
+        { "context": "Promotion source and conflict analysis" }
+      ]
+    }
+  },
+  {
+    "type": "pull_request",
+    "parameters": {
+      "allowed_merge_methods": ["merge"],
+      "dismiss_stale_reviews_on_push": true,
+      "require_code_owner_review": true,
+      "require_extra_approval_for_unattributed_changes": true,
+      "require_last_push_approval": true,
+      "required_approving_review_count": 1,
+      "required_review_thread_resolution": false,
+      "required_reviewers": []
+    }
+  }
+]
+JSON
+  else
+    cat <<'JSON'
+[
+  { "type": "deletion" },
+  { "type": "non_fast_forward" },
+  {
+    "type": "required_status_checks",
+    "parameters": {
+      "strict_required_status_checks_policy": true,
+      "do_not_enforce_on_create": false,
+      "required_status_checks": [
+        { "context": "Repository hygiene" },
+        { "context": "Lint, typecheck, test, build" },
+        { "context": "End-to-end" }
+      ]
+    }
+  },
+  {
+    "type": "pull_request",
+    "parameters": {
+      "allowed_merge_methods": ["merge"],
+      "dismiss_stale_reviews_on_push": true,
+      "require_code_owner_review": true,
+      "require_extra_approval_for_unattributed_changes": true,
+      "require_last_push_approval": true,
+      "required_approving_review_count": 1,
+      "required_review_thread_resolution": false,
+      "required_reviewers": []
+    }
+  }
+]
+JSON
+  fi
+}
+
 for branch in main dev; do
   id="$(ruleset_for_branch "$branch" || true)"
 
@@ -101,13 +134,15 @@ for branch in main dev; do
   echo "== $branch (ruleset $id)"
   echo "   before: $(gh api "repos/$REPO/rulesets/$id" --jq '[.rules[].type] | join(", ")')"
 
+  BRANCH_RULES="$(branch_rules "$branch")"
+
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "   after:  $(printf '%s' "$RULES" | grep -oE '"type": "[a-z_]+"' | sed 's/.*: "//; s/"$//' | paste -sd',' -)"
+    echo "   after:  $(printf '%s' "$BRANCH_RULES" | grep -oE '"type": "[a-z_]+"' | sed 's/.*: "//; s/"$//' | paste -sd',' -)"
     echo "   (dry run - nothing changed)"
     continue
   fi
 
-  printf '{"rules": %s}' "$RULES" \
+  printf '{"rules": %s}' "$BRANCH_RULES" \
     | gh api -X PUT "repos/$REPO/rulesets/$id" --input - >/dev/null
 
   echo "   after:  $(gh api "repos/$REPO/rulesets/$id" --jq '[.rules[].type] | join(", ")')"
@@ -120,9 +155,9 @@ fi
 echo
 echo "Repository-level merge settings:"
 gh api -X PATCH "repos/$REPO" \
-  -F allow_merge_commit=false \
-  -F allow_squash_merge=true \
-  -F allow_rebase_merge=true \
+  -F allow_merge_commit=true \
+  -F allow_squash_merge=false \
+  -F allow_rebase_merge=false \
   -F delete_branch_on_merge=true \
   -F has_wiki=false \
   --jq '{allow_merge_commit, allow_squash_merge, allow_rebase_merge, delete_branch_on_merge, has_wiki}'
