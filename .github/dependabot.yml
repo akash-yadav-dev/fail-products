@@ -4,6 +4,22 @@
 #
 # Targets dev, not main: dev is the integration branch every change goes
 # through first. CLAUDE.md section 2, .github/BRANCH-PROTECTION.md.
+#
+# Shape: at most ONE npm PR of patch/minor bumps and ONE npm PR of majors,
+# plus ONE Actions PR. Every npm PR rewrites package.json and pnpm-lock.yaml,
+# so each extra PR is another conflict waiting for the first to merge. When
+# majors were ungrouped, three PRs (a routine group, @types/node, typescript)
+# were merged back to back, "Update branch" merged the lockfile textually,
+# left it half-migrated, and broke every install on dev.
+#
+# Merging these safely:
+#   - Merge one at a time, and wait for the required checks to pass first.
+#   - If a PR conflicts after another merged, comment `@dependabot rebase`.
+#     Dependabot regenerates the lockfile itself. Do NOT use GitHub's
+#     "Update branch" button on these PRs: it merges pnpm-lock.yaml as text.
+#   - Never merge with the required app check red. A major bump is exactly
+#     where that check earns its keep (typescript 7 was merged red and broke
+#     lint for the whole repository).
 
 version: 2
 updates:
@@ -13,31 +29,34 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    # Two groups below, so two is the most that can be open at once.
+    open-pull-requests-limit: 2
+    # Let a release settle before proposing it. Version updates only:
+    # security updates ignore this and arrive immediately.
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
     groups:
       # Patch and minor bumps land together, one PR to review instead of
-      # a dozen. A major bump stays isolated -- it's the one that can
-      # actually break something.
+      # a dozen.
       routine:
+        patterns: ["*"]
         update-types: ["patch", "minor"]
-      # The toolchain majors that move together. TypeScript and @types/*
-      # each rewrite the same lockfile peer suffixes, and as separate PRs
-      # they were merged back to back: the second "Update branch" merged
-      # the lockfile textually, left it half-migrated, and broke every
-      # install on dev. One PR means one resolution of that lockfile.
-      # Any other major stays isolated.
-      toolchain-major:
-        patterns: ["typescript", "@types/*"]
+      # Every major in one PR, resolved against the lockfile once. A major
+      # is the bump that can break something, so it stays apart from the
+      # routine group, but never as one PR per package.
+      majors:
+        patterns: ["*"]
         update-types: ["major"]
     ignore:
       # TypeScript 7 is not usable yet: typescript-eslint (through
       # eslint-config-next) throws "does not support TS 7.0" on load, so
-      # `pnpm lint` cannot run at all. Dependabot proposed 7.0.2 in the
-      # toolchain-major group, it was merged, and dev went red. Drop this
-      # once typescript-eslint supports TypeScript 7 (tracked upstream in
+      # `pnpm lint` cannot run at all. Dependabot proposed 7.0.2, it was
+      # merged, and dev went red. Drop this once typescript-eslint supports
+      # TypeScript 7 (tracked upstream in
       # typescript-eslint/typescript-eslint#10940).
       - dependency-name: "typescript"
-        versions: [">=7"]
+        versions: [">=7.0.0"]
     commit-message:
       prefix: "fix"
       prefix-development: "chore"
@@ -48,6 +67,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
+    groups:
+      # Every action bump in one PR. Workflow files rarely conflict, but a
+      # bump of several actions is one review and one CI run, not several.
+      actions:
+        patterns: ["*"]
     commit-message:
       prefix: "ci"
