@@ -23,13 +23,17 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job runs on the pinned ubuntu-24.04 image, not ubuntu-latest. GitHub
+# moves the `latest` label to Ubuntu 26 on 2026-10-19; a pin makes that move a
+# reviewed change (bump the version here and in promotion.yml) rather than a
+# silent one that lands in the middle of an unrelated PR.
 jobs:
   # ---------------------------------------------------------------------------
   # Always runs. Cheap, and it is the check that protects a public repository.
   # ---------------------------------------------------------------------------
   hygiene:
     name: Repository hygiene
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         # actions/checkout v5
@@ -179,7 +183,7 @@ jobs:
   # ---------------------------------------------------------------------------
   detect:
     name: Detect application
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       has_app: ${{ steps.check.outputs.has_app }}
       has_e2e: ${{ steps.check.outputs.has_e2e }}
@@ -215,7 +219,7 @@ jobs:
   # ---------------------------------------------------------------------------
   app:
     name: Lint, typecheck, test, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect
     if: needs.detect.outputs.has_app == 'true'
     steps:
@@ -349,7 +353,7 @@ jobs:
   # ---------------------------------------------------------------------------
   e2e:
     name: End-to-end
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [detect, app]
     if: needs.detect.outputs.has_e2e == 'true'
     steps:
@@ -397,7 +401,7 @@ jobs:
   # ---------------------------------------------------------------------------
   dependencies:
     name: Dependency review
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: detect
     if: github.event_name == 'pull_request' && needs.detect.outputs.has_app == 'true'
     steps:
@@ -421,7 +425,7 @@ jobs:
 
   worker_build:
     name: Build Cloudflare Worker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: app
     if: needs.app.result == 'success'
     steps:
@@ -458,7 +462,7 @@ jobs:
 
   deploy:
     name: Deploy Cloudflare Worker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [hygiene, app, e2e, worker_build]
     if: >-
       github.event_name == 'push' &&
