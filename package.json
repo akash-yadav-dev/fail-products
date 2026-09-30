@@ -46,7 +46,7 @@
     "eslint-config-next": "16.3.6",
     "shadcn": "4.21.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^6",
     "vitest": "4.1.11",
     "wrangler": "4.142.0"
   }
