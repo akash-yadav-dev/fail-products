@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Checkout
         # actions/checkout v5
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           # Full history so the gate can diff against the base branch.
           fetch-depth: 0
@@ -186,7 +186,7 @@ jobs:
       has_tests: ${{ steps.check.outputs.has_tests }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - id: check
         run: |
@@ -220,7 +220,7 @@ jobs:
     if: needs.detect.outputs.has_app == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -354,7 +354,7 @@ jobs:
     if: needs.detect.outputs.has_e2e == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -386,7 +386,7 @@ jobs:
       - name: Upload report
         if: ${{ !cancelled() }}
         # actions/upload-artifact v4
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: playwright-report
           path: playwright-report/
@@ -402,7 +402,7 @@ jobs:
     if: github.event_name == 'pull_request' && needs.detect.outputs.has_app == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Explain dependency review status
         if: vars.DEPENDENCY_REVIEW_ENABLED != 'true'
@@ -426,7 +426,7 @@ jobs:
     if: needs.app.result == 'success'
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup
         uses: ./.github/actions/setup
       - name: Build isolated preview
@@ -470,7 +470,7 @@ jobs:
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup
         uses: ./.github/actions/setup
       - name: Check deploy configuration

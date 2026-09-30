@@ -41,7 +41,7 @@ release branch must preserve promotion ancestry.
 | Dismiss stale approvals on new commits | ✅ | ✅ | An approval applies to reviewed code, not to whatever lands after |
 | Require review from Code Owners | ✅ | ✅ | Pairs with `CODEOWNERS` |
 | Require status checks to pass | ✅ | ✅ | Main also requires `Promotion source and conflict analysis` |
-| Require branches to be up to date | ✅ | ✅ | Prevents semantic conflicts merging clean |
+| Require branches to be up to date | ❌ | ✅ | Promotion gate and PR CI validate the current main/dev merge candidate; dev feature PRs stay current. |
 | Require signed commits | ✅ | ✅ | Recommended once commit signing is configured |
 | Require linear history | ❌ | ❌ | Merge commits preserve shared ancestry |
 | Allowed merge method | **Merge commit only** | **Merge commit only** | Prevents promotion and integration history from being rewritten |
@@ -305,9 +305,10 @@ bash scripts/apply-branch-protection.sh --dry-run   # print what would change
 bash scripts/apply-branch-protection.sh             # apply
 ```
 
-It sets both branches to `deletion`, `non_fast_forward`, strict required checks, and
-merge-commit-only PRs. `main` also requires the promotion gate. It disables squash and rebase at
-the repository level. It is idempotent.
+It sets deletion and non-fast-forward rules and merge-commit-only PRs. Required checks are
+strict on dev; main checks its current PR merge candidate through CI and the promotion
+conflict gate. It disables squash and rebase at the repository level.
+It is idempotent.
 
 Two things it deliberately does **not** do:
 

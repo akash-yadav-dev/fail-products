@@ -36,6 +36,8 @@ fi
 # squash/rebase promotions rewriting the shared history. Both protected
 # branches therefore use merge commits. Account email privacy is a prerequisite;
 # see .github/BRANCH-PROTECTION.md.
+# Main uses non-strict freshness because GitHub adds a promotion merge commit only on main.
+# The promotion gate and PR CI validate the current main/dev candidate; dev remains strict.
 
 # The list endpoint returns rulesets without their `conditions` — every entry
 # reports `include: null` — so the target branch can only be read from each
@@ -63,7 +65,7 @@ branch_rules() {
   {
     "type": "required_status_checks",
     "parameters": {
-      "strict_required_status_checks_policy": true,
+      "strict_required_status_checks_policy": false,
       "do_not_enforce_on_create": false,
       "required_status_checks": [
         { "context": "Repository hygiene" },
