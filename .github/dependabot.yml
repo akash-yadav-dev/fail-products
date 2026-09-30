@@ -20,6 +20,15 @@ updates:
       # actually break something.
       routine:
         update-types: ["patch", "minor"]
+      # The toolchain majors that move together. TypeScript and @types/*
+      # each rewrite the same lockfile peer suffixes, and as separate PRs
+      # they were merged back to back: the second "Update branch" merged
+      # the lockfile textually, left it half-migrated, and broke every
+      # install on dev. One PR means one resolution of that lockfile.
+      # Any other major stays isolated.
+      toolchain-major:
+        patterns: ["typescript", "@types/*"]
+        update-types: ["major"]
     commit-message:
       prefix: "fix"
       prefix-development: "chore"
