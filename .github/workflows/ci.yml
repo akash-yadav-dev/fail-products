@@ -13,6 +13,11 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  # For .github/workflows/dependabot-autofix.yml only. A commit it makes with
+  # GITHUB_TOKEN does not trigger `pull_request`, so it starts this run on the
+  # Dependabot branch instead. The check runs attach to that commit, which is
+  # the one the PR shows, so the required checks report on it as usual.
+  workflow_dispatch:
 
 # Least privilege by default. Jobs that need more request it explicitly.
 # .github/BRANCH-PROTECTION.md
@@ -52,6 +57,11 @@ jobs:
             # Verify the contributor's head, not GitHub's synthetic merge
             # commit (which has a platform author and no DCO trailer).
             RANGE="origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Dispatched on a branch headed for dev (dependabot-autofix.yml).
+            # There is no `before`, so verify what the branch adds to dev.
+            git fetch --no-tags origin dev
+            RANGE="origin/dev..${{ github.sha }}"
           else
             TIP="${{ github.sha }}"
             SECOND_PARENT="$(git rev-parse "$TIP^2" 2>/dev/null || true)"
