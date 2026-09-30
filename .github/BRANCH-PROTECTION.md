@@ -109,6 +109,23 @@ permit a direct push to the branch. So:
 Set the mode to "Always" for nothing. That is the setting that would let a mistaken command
 write straight to `main`.
 
+### The bypass also skips the required checks
+
+A ruleset bypass is not scoped to the approval rule. It lets the admin merge a pull request past
+**every** rule in the ruleset, including the required status checks. GitHub has no setting that
+bypasses the review requirement but keeps the checks. This was observed, not assumed: #26, #27
+and #35 were merged with `Lint, typecheck, test, build` failing, and `dev` went red each time
+(a half-migrated lockfile, then TypeScript 7 breaking lint).
+
+So the checks are enforced by the maintainer, not by GitHub, whenever the maintainer merges:
+
+- **Merge only when the required checks are green.** A red required check is a stop, not a
+  warning. Fix the branch or close the pull request.
+- **Do not use "Update branch" on Dependabot pull requests.** It merges `pnpm-lock.yaml` as
+  text. Comment `@dependabot rebase` instead, so the lockfile is regenerated.
+- After a merge, confirm the `push` run on `dev` finished green. It is the only run that
+  exercises the database-backed suites and the staging deploy.
+
 ## Security settings
 
 **Settings → Code security:**
@@ -119,7 +136,7 @@ write straight to `main`.
 | Secret scanning — push protection | ✅ Enabled |
 | Dependabot alerts | ✅ Enabled |
 | Dependabot security updates | ✅ Enabled |
-| Dependabot version updates | ✅ Enabled (weekly, grouped) |
+| Dependabot version updates | ✅ Enabled — weekly, at most one npm routine PR, one npm majors PR and one Actions PR ([`dependabot.yml`](dependabot.yml)) |
 | Private vulnerability reporting | ✅ Enabled — [`SECURITY.md`](../SECURITY.md) depends on it |
 | CodeQL / code scanning | ✅ Enabled once source code exists |
 
