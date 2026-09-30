@@ -12,14 +12,18 @@
 # were merged back to back, "Update branch" merged the lockfile textually,
 # left it half-migrated, and broke every install on dev.
 #
-# Merging these safely:
-#   - Merge one at a time, and wait for the required checks to pass first.
-#   - If a PR conflicts after another merged, comment `@dependabot rebase`.
-#     Dependabot regenerates the lockfile itself. Do NOT use GitHub's
-#     "Update branch" button on these PRs: it merges pnpm-lock.yaml as text.
-#   - Never merge with the required app check red. A major bump is exactly
-#     where that check earns its keep (typescript 7 was merged red and broke
-#     lint for the whole repository).
+# Every Dependabot PR is repaired automatically before review by
+# .github/workflows/dependabot-autofix.yml: the lockfile is re-resolved,
+# pnpm's own security fixes are applied (Dependabot cannot fix a transitive
+# pnpm dependency itself), the result is verified, and CI re-runs on it. What
+# is left for a human is verify and merge.
+#
+# When a PR still fails, the autofix comments with the failing check. That
+# means the new version is incompatible with the code, not with the lockfile:
+# comment `@dependabot ignore this major version` on it, or add an ignore
+# below. Never merge it red, and never press "Update branch" on a Dependabot
+# PR: it merges pnpm-lock.yaml as text, and once anyone else has pushed to the
+# branch Dependabot stops rebasing it. Comment `@dependabot rebase` instead.
 
 version: 2
 updates:
@@ -49,14 +53,23 @@ updates:
         patterns: ["*"]
         update-types: ["major"]
     ignore:
-      # TypeScript 7 is not usable yet: typescript-eslint (through
-      # eslint-config-next) throws "does not support TS 7.0" on load, so
-      # `pnpm lint` cannot run at all. Dependabot proposed 7.0.2, it was
-      # merged, and dev went red. Drop this once typescript-eslint supports
-      # TypeScript 7 (tracked upstream in
-      # typescript-eslint/typescript-eslint#10940).
+      # Majors that belong to the Next.js toolchain move when Next moves, not
+      # when they are released. eslint-config-next declares loose peer ranges
+      # (eslint >=9, typescript >=3.3.1), so Dependabot believes any major is
+      # compatible. Both of these were proposed, merged red, and broke lint:
+      #   typescript 7  typescript-eslint refuses to load on it
+      #                 (typescript-eslint/typescript-eslint#10940)
+      #   eslint 10     eslint-plugin-react calls context.getFilename, which
+      #                 ESLint 10 removed
+      # Take these majors deliberately, in a PR that upgrades Next with them.
       - dependency-name: "typescript"
-        versions: [">=7.0.0"]
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # @types/node describes the Node API; the runtime is set by .nvmrc.
+      # A newer major types APIs the runtime does not have.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "fix"
       prefix-development: "chore"

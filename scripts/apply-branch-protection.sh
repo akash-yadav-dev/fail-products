@@ -36,8 +36,13 @@ fi
 # squash/rebase promotions rewriting the shared history. Both protected
 # branches therefore use merge commits. Account email privacy is a prerequisite;
 # see .github/BRANCH-PROTECTION.md.
-# Main uses non-strict freshness because GitHub adds a promotion merge commit only on main.
-# The promotion gate and PR CI validate the current main/dev candidate; dev remains strict.
+# Neither branch requires a PR to be up to date before merging. Main: GitHub adds
+# a promotion merge commit only on main, and the promotion gate and PR CI
+# validate the current main/dev candidate. Dev: the up-to-date rule forced an
+# "Update branch" merge onto every Dependabot PR that fell behind; that merge
+# joined pnpm-lock.yaml as text and broke dev three times (#26/#27, #36), and
+# it stops Dependabot maintaining the PR. PR CI already tests the merge with
+# dev, and the push run on dev re-tests every merge.
 
 # The list endpoint returns rulesets without their `conditions` — every entry
 # reports `include: null` — so the target branch can only be read from each
@@ -98,7 +103,7 @@ JSON
   {
     "type": "required_status_checks",
     "parameters": {
-      "strict_required_status_checks_policy": true,
+      "strict_required_status_checks_policy": false,
       "do_not_enforce_on_create": false,
       "required_status_checks": [
         { "context": "Repository hygiene" },
