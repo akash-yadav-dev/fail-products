@@ -41,7 +41,7 @@ release branch must preserve promotion ancestry.
 | Dismiss stale approvals on new commits | ✅ | ✅ | An approval applies to reviewed code, not to whatever lands after |
 | Require review from Code Owners | ✅ | ✅ | Pairs with `CODEOWNERS` |
 | Require status checks to pass | ✅ | ✅ | Main also requires `Promotion source and conflict analysis` |
-| Require branches to be up to date | ❌ | ✅ | Promotion gate and PR CI validate the current main/dev merge candidate; dev feature PRs stay current. |
+| Require branches to be up to date | ❌ | ❌ | PR CI tests the merge with the base, the promotion gate checks main/dev, and the push run on `dev` re-tests every merge. On `dev` the rule forced an "Update branch" merge onto Dependabot PRs, which broke the lockfile three times. |
 | Require signed commits | ✅ | ✅ | Recommended once commit signing is configured |
 | Require linear history | ❌ | ❌ | Merge commits preserve shared ancestry |
 | Allowed merge method | **Merge commit only** | **Merge commit only** | Prevents promotion and integration history from being rewritten |
@@ -122,9 +122,24 @@ So the checks are enforced by the maintainer, not by GitHub, whenever the mainta
 - **Merge only when the required checks are green.** A red required check is a stop, not a
   warning. Fix the branch or close the pull request.
 - **Do not use "Update branch" on Dependabot pull requests.** It merges `pnpm-lock.yaml` as
-  text. Comment `@dependabot rebase` instead, so the lockfile is regenerated.
+  text, and once anyone else has pushed to the branch Dependabot stops rebasing it. Comment
+  `@dependabot rebase` instead. `dev` no longer requires branches to be up to date, so a
+  Dependabot PR that is merely behind never needs updating to merge.
 - After a merge, confirm the `push` run on `dev` finished green. It is the only run that
   exercises the database-backed suites and the staging deploy.
+
+### Dependabot pull requests repair themselves
+
+[`workflows/dependabot-autofix.yml`](workflows/dependabot-autofix.yml) runs on every Dependabot
+PR into `dev`. It re-resolves the lockfile against `package.json`, applies pnpm's own security
+fixes (`pnpm audit --fix`), proves the result installs, and runs lint, typecheck, unit tests and
+build. If that passes and anything changed, it commits the repair to the PR branch through the
+API and starts CI on it. If it fails, the new version is incompatible with the code, and it says
+so in one comment on the PR.
+
+What is left for the maintainer: when the checks are green, merge. When the autofix comment
+says an update cannot be repaired, comment `@dependabot ignore this major version` (or add an
+`ignore` to [`dependabot.yml`](dependabot.yml)).
 
 ## Security settings
 
@@ -135,7 +150,7 @@ So the checks are enforced by the maintainer, not by GitHub, whenever the mainta
 | Secret scanning | ✅ Enabled |
 | Secret scanning — push protection | ✅ Enabled |
 | Dependabot alerts | ✅ Enabled |
-| Dependabot security updates | ✅ Enabled |
+| Dependabot security updates | ✅ Enabled — direct dependencies only. Dependabot cannot fix a transitive pnpm dependency ([dependabot-core#13177](https://github.com/dependabot/dependabot-core/issues/13177)); those are fixed by [`dependabot-autofix.yml`](workflows/dependabot-autofix.yml) and pinned in `pnpm-workspace.yaml` `overrides` |
 | Dependabot version updates | ✅ Enabled — weekly, at most one npm routine PR, one npm majors PR and one Actions PR ([`dependabot.yml`](dependabot.yml)) |
 | Private vulnerability reporting | ✅ Enabled — [`SECURITY.md`](../SECURITY.md) depends on it |
 | CodeQL / code scanning | ✅ Enabled once source code exists |
@@ -323,8 +338,8 @@ bash scripts/apply-branch-protection.sh             # apply
 ```
 
 It sets deletion and non-fast-forward rules and merge-commit-only PRs. Required checks are
-strict on dev; main checks its current PR merge candidate through CI and the promotion
-conflict gate. It disables squash and rebase at the repository level.
+not strict on either branch: PR CI tests the merge candidate, the promotion gate checks
+main/dev, and the push run on `dev` re-tests every merge. It disables squash and rebase at the repository level.
 It is idempotent.
 
 Two things it deliberately does **not** do:

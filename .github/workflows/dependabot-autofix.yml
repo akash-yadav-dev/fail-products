@@ -1,0 +1,265 @@
+name: Dependabot autofix
+
+# Repairs a Dependabot pull request before anyone has to look at it, so the
+# maintainer's job is to verify and merge, not to fix.
+#
+# What goes wrong without this, every one of which has happened here:
+#   - The lockfile disagrees with package.json after a branch update, and
+#     `pnpm install --frozen-lockfile` fails before any check runs.
+#   - A vulnerable *transitive* dependency cannot be fixed by Dependabot at
+#     all: dependabot-core does not update transitive pnpm dependencies
+#     (dependabot/dependabot-core#13177). Its security job fails with
+#     security_update_not_possible, and retries on every push to main.
+#
+# What this does, on every Dependabot PR into dev:
+#   1. repair  (no write access)  re-resolve the lockfile, apply pnpm's own
+#      security fixes (`pnpm audit --fix`), prove the result installs, then
+#      run lint, typecheck, unit tests and build against it.
+#   2. publish (write access, runs no dependency code)  commit the repaired
+#      files to the PR branch and start CI on that commit.
+#   3. report  when the change cannot be repaired automatically (a major that
+#      breaks the build), say why on the PR.
+#
+# The split between 1 and 2 is the security boundary. Job 1 executes the
+# freshly updated dependencies (install, lint, test, build), so it gets a
+# read-only token. Job 2 holds the write token and only moves files.
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-autofix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    name: Repair and verify
+    # Dependabot's own pushes only. A push made by this workflow is made with
+    # GITHUB_TOKEN, which never triggers another workflow run, so this cannot
+    # loop on itself.
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      verified: ${{ steps.verify.outputs.verified }}
+      failed_step: ${{ steps.verify.outputs.failed_step }}
+    steps:
+      - name: Checkout the PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          # The lockfile may be the thing that is broken, so a frozen install
+          # is what this job repairs, not what it starts from.
+          install: "false"
+
+      - name: Repair the lockfile and apply security fixes
+        id: repair
+        run: |
+          set -uo pipefail
+          cp pnpm-workspace.yaml "$RUNNER_TEMP/workspace.before"
+
+          # pnpm 11 caches "already up to date" in node_modules and does not
+          # notice an overrides change in pnpm-workspace.yaml. Clear it before
+          # every resolution so the lockfile is really recomputed.
+          fresh_install() {
+            rm -f node_modules/.pnpm-workspace-state*.json
+            pnpm install --no-frozen-lockfile
+          }
+
+          # 1. Make the lockfile agree with package.json.
+          fresh_install || { echo "::error::The lockfile could not be resolved against package.json."; exit 1; }
+
+          # 2. Security: bump within the ranges parents allow, then force
+          #    what a parent pins (an override). Both are pnpm's own fixers.
+          pnpm audit --fix=update  || true
+          pnpm audit --fix=override || true
+
+          # 3. pnpm's advisory data sometimes names a patched version that was
+          #    never published (esbuild "0.24.3"). Such an override cannot
+          #    install. Keep the lockfile fixes and drop the overrides rather
+          #    than commit something that breaks every install.
+          if ! fresh_install; then
+            echo "::warning::An override from 'pnpm audit --fix' names a version that cannot be installed; keeping the lockfile repair without new overrides."
+            cp "$RUNNER_TEMP/workspace.before" pnpm-workspace.yaml
+            fresh_install || { echo "::error::The lockfile could not be resolved."; exit 1; }
+            echo "dropped_overrides=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          # 4. Prove it: exactly what every CI job runs first.
+          rm -f node_modules/.pnpm-workspace-state*.json
+          pnpm install --frozen-lockfile
+
+      - name: Record what changed
+        id: diff
+        run: |
+          mkdir -p "$RUNNER_TEMP/repair"
+          changed=""
+          for f in package.json pnpm-lock.yaml pnpm-workspace.yaml; do
+            if ! git diff --quiet -- "$f"; then
+              changed="$changed $f"
+              cp "$f" "$RUNNER_TEMP/repair/$f"
+            fi
+          done
+          printf '%s\n' $changed > "$RUNNER_TEMP/repair/FILES"
+          if [ -n "$changed" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Repaired:$changed"
+            git diff --stat
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing to repair."
+          fi
+
+      - name: Verify
+        id: verify
+        # The same checks CI's app job runs. This decides whether the repair
+        # is published; CI then re-runs everything on the published commit.
+        run: |
+          set -o pipefail
+          for step in lint typecheck test:unit build; do
+            echo "::group::pnpm $step"
+            if ! pnpm "$step" 2>&1 | tee "$RUNNER_TEMP/$step.log"; then
+              echo "::endgroup::"
+              echo "verified=false" >> "$GITHUB_OUTPUT"
+              echo "failed_step=$step" >> "$GITHUB_OUTPUT"
+              mkdir -p "$RUNNER_TEMP/repair"
+              tail -n 40 "$RUNNER_TEMP/$step.log" > "$RUNNER_TEMP/repair/FAILURE"
+              exit 0
+            fi
+            echo "::endgroup::"
+          done
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+        env:
+          # Same as CI: a statically rendered page must not read a database at
+          # build time.
+          DATABASE_URL: ""
+
+      - name: Hand the result to the publish job
+        if: steps.diff.outputs.changed == 'true' || steps.verify.outputs.verified == 'false'
+        # actions/upload-artifact v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependabot-repair
+          path: ${{ runner.temp }}/repair/
+          retention-days: 1
+
+  publish:
+    name: Publish the repair
+    needs: repair
+    if: needs.repair.outputs.changed == 'true' && needs.repair.outputs.verified == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # commit the repaired files to the PR branch
+      actions: write    # start CI on that commit
+    steps:
+      - name: Fetch the repaired files
+        # actions/download-artifact v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dependabot-repair
+          path: repair
+
+      - name: Commit to the PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Through the API, not `git push`: GitHub signs the commit and records
+        # itself as the committer, which is what the verification gate expects
+        # of a platform-made commit (scripts/verify-changes.sh). expectedHeadOid
+        # makes this fail rather than overwrite if Dependabot pushed meanwhile;
+        # that push starts a fresh run of this workflow.
+        run: |
+          set -euo pipefail
+          # Files, never arguments: the base64 lockfile is ~550 KB, and Linux
+          # caps a single command-line argument at 128 KB.
+          : > additions.jsonl
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            base64 -w0 "repair/$f" > body.b64
+            jq -n --arg path "$f" --rawfile body body.b64 \
+              '{path: $path, contents: $body}' >> additions.jsonl
+          done < repair/FILES
+
+          jq -n \
+            --arg repo "$GITHUB_REPOSITORY" --arg branch "$BRANCH" --arg oid "$HEAD_SHA" \
+            --slurpfile additions additions.jsonl \
+            '{
+               query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+               variables: { input: {
+                 branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                 expectedHeadOid: $oid,
+                 fileChanges: { additions: $additions },
+                 message: {
+                   headline: "fix: repair the lockfile and apply security fixes",
+                   body: "Automated by .github/workflows/dependabot-autofix.yml: re-resolved pnpm-lock.yaml against package.json and applied pnpm audit fixes. Verified with lint, typecheck, unit tests and build before this commit was made."
+                 }
+               } }
+             }' > payload.json
+
+          gh api graphql --input payload.json --jq '.data.createCommitOnBranch.commit.oid'
+
+      - name: Start CI on the repaired commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        # A commit made with GITHUB_TOKEN does not trigger `pull_request`
+        # workflows. workflow_dispatch is the documented exception, and the
+        # check runs it produces attach to the same commit the PR shows.
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  report:
+    name: Report what could not be repaired
+    needs: repair
+    if: needs.repair.outputs.verified == 'false'
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Fetch the failure
+        # actions/download-artifact v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dependabot-repair
+          path: repair
+
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          STEP: ${{ needs.repair.outputs.failed_step }}
+        # One comment per PR, edited in place on later runs, so a re-run does
+        # not add another notification.
+        run: |
+          set -euo pipefail
+          {
+            echo "<!-- dependabot-autofix -->"
+            echo "**This update cannot be repaired automatically.** \`pnpm $STEP\` fails after the lockfile repair, so the new version is incompatible with the code or the toolchain, not just with the lockfile."
+            echo
+            echo '```'
+            cat repair/FAILURE
+            echo '```'
+            echo
+            echo "To skip this version, comment \`@dependabot ignore this major version\` (or \`minor\`/\`patch\`). Dependabot closes this PR and stops proposing it."
+          } > body.md
+
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- dependabot-autofix -->"))][0].id // empty')"
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@body.md > /dev/null
+          else
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          fi

@@ -22,3 +22,16 @@ allowBuilds:
   # The platform binary is supplied by @cloudflare/workerd-*. The install
   # script only checks it and may fetch a fallback; keep install scripts denied.
   workerd: false
+
+# Security floors for transitive dependencies. Dependabot cannot update a
+# transitive dependency in a pnpm project (dependabot/dependabot-core#13177):
+# its security-update job fails with security_update_not_possible and retries
+# on every push to main. An override is how the patched version is forced.
+# .github/workflows/dependabot-autofix.yml maintains these automatically.
+#
+# undici: miniflare pins an exact 7.29.0. esbuild: drizzle-kit's deprecated
+# @esbuild-kit loader pins ~0.18.20; the advisory names 0.24.3 as the fix but
+# that version was never published, so the floor is 0.25.0.
+overrides:
+  "undici@>=7.0.0 <7.29.1": "^7.29.1"
+  "esbuild@<=0.24.2": "^0.25.0"
