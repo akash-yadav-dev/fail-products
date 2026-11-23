@@ -23,6 +23,31 @@ allowBuilds:
   # script only checks it and may fetch a fallback; keep install scripts denied.
   workerd: false
 
+minimumReleaseAgeExclude:
+  - source-map-js@1.2.2
+  - sharp@0.35.5
+  - '@modelcontextprotocol/sdk@1.31.0'
+  - next@16.3.8
+  - hono@4.13.11
+  - vite@8.2.4
+  - '@modelcontextprotocol/sdk@1.32.0'
+  - '@vitest/mocker@5.0.3'
+  - next@16.4.1
+  - ip-address@10.7.4
+  - zod@4.6.6
+  - body-parser@2.4.0
+  - undici@7.30.1
+  - fast-uri@3.1.9
+  - systeminformation@5.33.14
+  - '@hono/node-server@2.1.3'
+  - systeminformation@5.33.16
+  - qs@6.16.1
+  - glob@14.0.2
+  - minimatch@11.0.1
+  - '@hono/node-server@2.1.6'
+  - hono@4.13.16
+  - next@16.4.5
+
 # Security floors for transitive dependencies. Dependabot cannot update a
 # transitive dependency in a pnpm project (dependabot/dependabot-core#13177):
 # its security-update job fails with security_update_not_possible and retries
@@ -35,3 +60,10 @@ allowBuilds:
 overrides:
   "undici@>=7.0.0 <7.29.1": "^7.29.1"
   "esbuild@<=0.24.2": "^0.25.0"
+  '@vitest/mocker@>=5.0.0-beta.1 <5.0.3': ^5.0.3
+  '@vitest/mocker@>=5.0.0-rc.2 <5.0.3': ^5.0.3
+  glob@>=9.0.0 <=14.0.1: ^14.0.2
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1
+  sharp@<0.35.5: ^0.35.5
+  vite@>=8.2.0 <=8.2.3: ^8.2.4
+  zod@<4.6.6: ^4.6.6
