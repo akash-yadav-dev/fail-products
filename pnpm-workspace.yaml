@@ -23,6 +23,11 @@ allowBuilds:
   # script only checks it and may fetch a fallback; keep install scripts denied.
   workerd: false
 
+minimumReleaseAgeExclude:
+  - vite@8.2.4
+  - glob@14.0.2
+  - minimatch@11.0.1
+
 # Security floors for transitive dependencies. Dependabot cannot update a
 # transitive dependency in a pnpm project (dependabot/dependabot-core#13177):
 # its security-update job fails with security_update_not_possible and retries
@@ -35,3 +40,6 @@ allowBuilds:
 overrides:
   "undici@>=7.0.0 <7.29.1": "^7.29.1"
   "esbuild@<=0.24.2": "^0.25.0"
+  glob@>=9.0.0 <=14.0.1: ^14.0.2
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1
+  vite@>=8.2.0 <=8.2.3: ^8.2.4
